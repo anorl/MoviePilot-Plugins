@@ -3,12 +3,13 @@
     "name": "DeepFlood论坛签到",
     "description": "自动完成 DeepFlood 论坛每日签到（参考 NodeSeek 签到插件范式）。需要配置站点URL与Cookie。",
     "labels": "站点",
-    "version": "0.1.7",
+    "version": "0.1.8",
     "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/deepfloodsign.png",
     "author": "anorl",
     "level": 2,
     "v2": true,
     "history": {
+      "v0.1.8": "增强签到结果展示：自动提取奖励（鸡腿）并在签到历史页面展示。",
       "v0.1.7": "修复 V2 抽象方法缺失：补充 get_page/get_api/get_command，解决安装后加载失败问题。",
       "v0.1.0": "初始版本：支持配置化签到接口（站点URL/Cookie/API路径/GET-POST），支持定时服务与历史记录，支持 cloudscraper/curl_cffi 兜底。"
     }
