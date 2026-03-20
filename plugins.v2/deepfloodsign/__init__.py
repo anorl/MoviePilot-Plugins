@@ -56,7 +56,7 @@ class deepfloodsign(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/deepfloodsign.png"
     # 插件版本
-    plugin_version = "0.1.5"
+    plugin_version = "0.1.6"
     # 插件作者
     plugin_author = "anorl"
     # 作者主页
