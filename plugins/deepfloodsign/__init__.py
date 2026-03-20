@@ -444,7 +444,8 @@ class deepfloodsign(_PluginBase):
         except Exception:
             pass
 
-    def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+    @staticmethod
+    def get_form() -> Tuple[List[dict], Dict[str, Any]]:
         curl_cffi_status = "✅ 已安装" if HAS_CURL_CFFI else "❌ 未安装"
         cloudscraper_status = "✅ 已启用" if HAS_CLOUDSCRAPER else "❌ 未启用"
 
