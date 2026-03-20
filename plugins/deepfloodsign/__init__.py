@@ -532,106 +532,109 @@ class deepfloodsign(_PluginBase):
         except Exception:
             pass
 
-    @staticmethod
-    def get_form() -> Tuple[List[dict], Dict[str, Any]]:
-        curl_cffi_status = "✅ 已安装" if HAS_CURL_CFFI else "❌ 未安装"
-        cloudscraper_status = "✅ 已启用" if HAS_CLOUDSCRAPER else "❌ 未启用"
-
-        return [
-            {
-                'component': 'VForm',
-                'content': [
+    def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        try:
+                curl_cffi_status = "✅ 已安装" if HAS_CURL_CFFI else "❌ 未安装"
+                cloudscraper_status = "✅ 已启用" if HAS_CLOUDSCRAPER else "❌ 未启用"
+            
+                return [
                     {
-                        'component': 'VRow',
+                        'component': 'VForm',
                         'content': [
                             {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [{'component': 'VSwitch', 'props': {'model': 'enabled', 'label': '启用插件'}}]
+                                'component': 'VRow',
+                                'content': [
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12, 'md': 3},
+                                        'content': [{'component': 'VSwitch', 'props': {'model': 'enabled', 'label': '启用插件'}}]
+                                    },
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12, 'md': 3},
+                                        'content': [{'component': 'VSwitch', 'props': {'model': 'notify', 'label': '开启通知'}}]
+                                    },
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12, 'md': 3},
+                                        'content': [{'component': 'VSwitch', 'props': {'model': 'random_choice', 'label': '随机奖励(如支持)'}}]
+                                    },
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12, 'md': 3},
+                                        'content': [{'component': 'VSwitch', 'props': {'model': 'onlyonce', 'label': '立即运行一次'}}]
+                                    },
+                                ]
                             },
                             {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [{'component': 'VSwitch', 'props': {'model': 'notify', 'label': '开启通知'}}]
+                                'component': 'VRow',
+                                'content': [
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12, 'md': 6},
+                                        'content': [{'component': 'VTextField', 'props': {'model': 'site_url', 'label': 'DeepFlood站点URL', 'placeholder': 'https://www.deepflood.com'}}]
+                                    },
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12, 'md': 6},
+                                        'content': [{'component': 'VTextField', 'props': {'model': 'cron', 'label': '定时任务(cron)', 'placeholder': '0 9 * * * (每天9点)'}}]
+                                    },
+                                ]
                             },
                             {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [{'component': 'VSwitch', 'props': {'model': 'random_choice', 'label': '随机奖励(如支持)'}}]
+                                'component': 'VRow',
+                                'content': [
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12},
+                                        'content': [{'component': 'VTextField', 'props': {'model': 'cookie', 'label': '站点Cookie', 'placeholder': '请输入站点Cookie值'}}]
+                                    }
+                                ]
                             },
                             {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 3},
-                                'content': [{'component': 'VSwitch', 'props': {'model': 'onlyonce', 'label': '立即运行一次'}}]
+                                'component': 'VRow',
+                                'content': [
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12, 'md': 6},
+                                        'content': [{'component': 'VTextField', 'props': {'model': 'attendance_path', 'label': '签到API路径', 'placeholder': '/api/attendance 或 /attendance.php 等'}}]
+                                    },
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12, 'md': 6},
+                                        'content': [{'component': 'VSelect', 'props': {'model': 'attendance_method', 'label': '签到请求方法', 'items': [{'title': 'POST', 'value': 'POST'}, {'title': 'GET', 'value': 'GET'}]}}]
+                                    },
+                                ]
+                            },
+                            {
+                                'component': 'VRow',
+                                'content': [
+                                    {
+                                        'component': 'VCol',
+                                        'props': {'cols': 12},
+                                        'content': [{'component': 'VAlert', 'props': {'type': 'info', 'variant': 'tonal', 'text': f"依赖状态：curl_cffi={curl_cffi_status}，cloudscraper={cloudscraper_status}。\n\n如 DeepFlood 的签到接口不是 /api/attendance，请在上方配置实际路径与方法。"}}]
+                                    }
+                                ]
                             },
                         ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [{'component': 'VTextField', 'props': {'model': 'site_url', 'label': 'DeepFlood站点URL', 'placeholder': 'https://www.deepflood.com'}}]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [{'component': 'VTextField', 'props': {'model': 'cron', 'label': '定时任务(cron)', 'placeholder': '0 9 * * * (每天9点)'}}]
-                            },
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [{'component': 'VTextField', 'props': {'model': 'cookie', 'label': '站点Cookie', 'placeholder': '请输入站点Cookie值'}}]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [{'component': 'VTextField', 'props': {'model': 'attendance_path', 'label': '签到API路径', 'placeholder': '/api/attendance 或 /attendance.php 等'}}]
-                            },
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
-                                'content': [{'component': 'VSelect', 'props': {'model': 'attendance_method', 'label': '签到请求方法', 'items': [{'title': 'POST', 'value': 'POST'}, {'title': 'GET', 'value': 'GET'}]}}]
-                            },
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {'cols': 12},
-                                'content': [{'component': 'VAlert', 'props': {'type': 'info', 'variant': 'tonal', 'text': f"依赖状态：curl_cffi={curl_cffi_status}，cloudscraper={cloudscraper_status}。\n\n如 DeepFlood 的签到接口不是 /api/attendance，请在上方配置实际路径与方法。"}}]
-                            }
-                        ]
-                    },
-                ]
-            }
-        ], {
-            "enabled": False,
-            "notify": False,
-            "onlyonce": False,
-            "cron": "0 9 * * *",
-            "cookie": "",
-            "site_url": "https://www.deepflood.com",
-            "random_choice": True,
-            "use_proxy": True,
-            "max_retries": 3,
-            "verify_ssl": False,
-            "min_delay": 5,
-            "max_delay": 12,
-            "history_days": 30,
-            "attendance_path": "/api/attendance",
-            "attendance_method": "POST"
-        }
+                    }
+                ], {
+                    "enabled": False,
+                    "notify": False,
+                    "onlyonce": False,
+                    "cron": "0 9 * * *",
+                    "cookie": "",
+                    "site_url": "https://www.deepflood.com",
+                    "random_choice": True,
+                    "use_proxy": True,
+                    "max_retries": 3,
+                    "verify_ssl": False,
+                    "min_delay": 5,
+                    "max_delay": 12,
+                    "history_days": 30,
+                    "attendance_path": "/api/attendance",
+                    "attendance_method": "POST"
+                }
+        except Exception as e:
+            logger.error(f"get_form 渲染失败: {str(e)}", exc_info=True)
+            return [], {}
