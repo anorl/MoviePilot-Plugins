@@ -28,7 +28,7 @@ class wuaipojiesign(_PluginBase):
     plugin_name = "吾爱破解论坛签到"
     plugin_desc = "自动完成 52pojie 每日打卡签到，支持定时任务与通知。"
     plugin_icon = "https://www.52pojie.cn/favicon.ico"
-    plugin_version = "0.1.0"
+    plugin_version = "0.1.1"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "wuaipojiesign_"
@@ -737,3 +737,4 @@ class wuaipojiesign(_PluginBase):
 
     def get_api(self) -> List[Dict[str, Any]]:
         return []
+

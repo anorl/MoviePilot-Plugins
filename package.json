@@ -18,12 +18,13 @@
     "name": "吾爱破解论坛签到",
     "description": "自动完成 52pojie 每日打卡签到，支持定时任务、通知、重试与历史记录。",
     "labels": "站点",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "icon": "https://www.52pojie.cn/favicon.ico",
     "author": "anorl",
     "level": 2,
     "v2": true,
     "history": {
+      "v0.1.1": "修复重试逻辑与会话保持，增强 apply/draw 链接解析和可见日志。",
       "v0.1.0": "初始版本：自动解析打卡入口，支持 apply/draw 流程，支持 Cookie、cron、通知与重试。"
     }
   }
