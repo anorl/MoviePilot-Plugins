@@ -1,7 +1,7 @@
 {
   "deepfloodsign": {
     "name": "DeepFlood论坛签到",
-    "description": "自动完成 DeepFlood 论坛每日签到（参考 NodeSeek 签到插件范式）。需要配置站点URL与Cookie。",
+    "description": "自动完成 DeepFlood 论坛每日签到，支持可配置签到路径、重试、通知与历史记录。",
     "labels": "站点",
     "version": "0.1.8",
     "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/deepfloodsign.png",
@@ -9,9 +9,22 @@
     "level": 2,
     "v2": true,
     "history": {
-      "v0.1.8": "增强签到结果展示：自动提取奖励（鸡腿）并在签到历史页面展示。",
-      "v0.1.7": "修复 V2 抽象方法缺失：补充 get_page/get_api/get_command，解决安装后加载失败问题。",
-      "v0.1.0": "初始版本：支持配置化签到接口（站点URL/Cookie/API路径/GET-POST），支持定时服务与历史记录，支持 cloudscraper/curl_cffi 兜底。"
+      "v0.1.8": "增强签到结果展示：自动提取奖励并在历史页展示。",
+      "v0.1.7": "修复 V2 抽象方法缺失：补齐 get_page/get_api/get_command。",
+      "v0.1.0": "初始版本：支持 URL/Cookie/API 路径与方法配置、定时服务、历史记录与多请求后备。"
+    }
+  },
+  "wuaipojiesign": {
+    "name": "吾爱破解论坛签到",
+    "description": "自动完成 52pojie 每日打卡签到，支持定时任务、通知、重试与历史记录。",
+    "labels": "站点",
+    "version": "0.1.0",
+    "icon": "https://www.52pojie.cn/favicon.ico",
+    "author": "anorl",
+    "level": 2,
+    "v2": true,
+    "history": {
+      "v0.1.0": "初始版本：自动解析打卡入口，支持 apply/draw 流程，支持 Cookie、cron、通知与重试。"
     }
   }
 }
