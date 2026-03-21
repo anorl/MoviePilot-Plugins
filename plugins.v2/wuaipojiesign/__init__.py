@@ -196,12 +196,20 @@ class wuaipojiesign(_PluginBase):
         return urljoin(f"{self._base_url}/", href)
 
     def _extract_draw_link(self, content: str) -> Optional[str]:
-        pattern = rf'href="([^"]*home\.php\?mod=task(?:&amp;|&)do=draw(?:&amp;|&)id={self._task_id}[^"]*)"'
-        matched = re.search(pattern, content, flags=re.IGNORECASE)
-        if not matched:
-            return None
-        href = html.unescape(matched.group(1))
-        return urljoin(f"{self._base_url}/", href)
+        # 兼容 href / JS 字符串 / inajax 返回中的 draw 链接
+        patterns = [
+            rf'href="([^"]*home\.php\?mod=task(?:&amp;|&)do=draw(?:&amp;|&)id={self._task_id}[^"]*)"',
+            rf"href='([^']*home\.php\?mod=task(?:&amp;|&)do=draw(?:&amp;|&)id={self._task_id}[^']*)'",
+            rf'"(home\.php\?mod=task(?:&amp;|&)do=draw(?:&amp;|&)id={self._task_id}[^"]*)"',
+            rf"'(home\.php\?mod=task(?:&amp;|&)do=draw(?:&amp;|&)id={self._task_id}[^']*)'",
+            rf"(home\.php\?mod=task(?:&amp;|&)do=draw(?:&amp;|&)id={self._task_id}[^\s<\"']*)",
+        ]
+        for pattern in patterns:
+            matched = re.search(pattern, content, flags=re.IGNORECASE)
+            if matched:
+                href = html.unescape(matched.group(1))
+                return urljoin(f"{self._base_url}/", href)
+        return None
 
     @staticmethod
     def _is_cookie_invalid(content: str) -> bool:
@@ -229,6 +237,8 @@ class wuaipojiesign(_PluginBase):
     def _is_sign_success(content: str) -> bool:
         keys = [
             "任务已成功完成",
+            "任务申请成功",
+            "您已申请此任务",
             "打卡签到成功",
             "签到成功",
             "恭喜",
@@ -267,6 +277,9 @@ class wuaipojiesign(_PluginBase):
 
         apply_resp = self._http_get(apply_link, referer=home_url)
         apply_text = apply_resp.text or ""
+        logger.info(
+            f"[wuaipojiesign] apply 响应: status={getattr(apply_resp, 'status_code', None)}, len={len(apply_text)}"
+        )
 
         if self._is_cookie_invalid(apply_text):
             return {"success": False, "message": "签到请求被重定向到登录页，Cookie 可能已失效"}
@@ -279,6 +292,9 @@ class wuaipojiesign(_PluginBase):
             logger.info(f"[wuaipojiesign] 解析到 draw 链接: {draw_link}")
             draw_resp = self._http_get(draw_link, referer=apply_link)
             draw_text = draw_resp.text or ""
+            logger.info(
+                f"[wuaipojiesign] draw 响应: status={getattr(draw_resp, 'status_code', None)}, len={len(draw_text)}"
+            )
             if self._is_cookie_invalid(draw_text):
                 return {"success": False, "message": "领奖请求登录失效，Cookie 可能已过期"}
             if self._is_already_signed(draw_text):
@@ -300,6 +316,8 @@ class wuaipojiesign(_PluginBase):
                 "gain": self._extract_gain(apply_text),
             }
 
+        snippet = re.sub(r"\s+", " ", apply_text)[:260]
+        logger.warning(f"[wuaipojiesign] apply 未识别成功，响应片段: {snippet}")
         return {"success": False, "message": "签到请求未返回成功状态，可能页面规则已变更"}
 
     def sign(self):
@@ -325,11 +343,18 @@ class wuaipojiesign(_PluginBase):
             try:
                 logger.info(f"[wuaipojiesign] 第 {attempt}/{retries} 次签到尝试")
                 result = self._do_sign_once()
-                break
+                if result.get("success"):
+                    break
+                logger.warning(
+                    f"[wuaipojiesign] 第 {attempt}/{retries} 次签到失败: {result.get('message', '未知错误')}"
+                )
+                if attempt < retries:
+                    time.sleep(2)
             except Exception as err:
                 last_err = err
                 logger.warning(f"[wuaipojiesign] 第 {attempt}/{retries} 次请求异常: {err}")
-                time.sleep(2)
+                if attempt < retries:
+                    time.sleep(2)
 
         if not result.get("success") and last_err:
             result = {"success": False, "message": f"重试后仍失败: {last_err}"}
