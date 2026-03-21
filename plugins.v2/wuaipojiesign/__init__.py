@@ -40,7 +40,7 @@ class wuaipojiesign(_PluginBase):
     plugin_name = "吾爱破解论坛签到"
     plugin_desc = "自动完成 52pojie 每日打卡签到，支持定时任务与通知。"
     plugin_icon = "https://www.52pojie.cn/favicon.ico"
-    plugin_version = "0.1.3"
+    plugin_version = "0.1.4"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "wuaipojiesign_"
@@ -205,6 +205,46 @@ class wuaipojiesign(_PluginBase):
             "jschl",
         ]
         return any(k in (content or "") for k in keys)
+
+    @staticmethod
+    def _extract_js_cookies(content: str) -> Dict[str, str]:
+        text = content or ""
+        cookies: Dict[str, str] = {}
+
+        # 常见风控 cookie（含/不含 _s）
+        for name in ["__jsl_clearance_s", "__jsl_clearance", "__jsluid_s", "__jsluid"]:
+            matched = re.search(rf"{name}=([^;\"']+)", text)
+            if matched:
+                cookies[name] = matched.group(1)
+
+        # 通用 document.cookie='k=v;...'
+        for matched in re.finditer(r"document\.cookie\s*=\s*['\"]([^'\";=]+)=([^;'\"\\]+)", text):
+            key = matched.group(1).strip()
+            val = matched.group(2).strip()
+            if key and val:
+                cookies[key] = val
+        return cookies
+
+    def _handle_js_challenge_once(
+        self, session, content: str, target_url: str, referer: Optional[str], stage: str, client_name: str, ua_kind: str
+    ):
+        js_cookies = self._extract_js_cookies(content)
+        if not js_cookies:
+            return None
+
+        logger.info(f"[wuaipojiesign] {client_name}/{ua_kind} 在 {stage} 提取到风控cookie: {list(js_cookies.keys())}")
+        for key, value in js_cookies.items():
+            try:
+                session.cookies.set(key, value)
+            except Exception:
+                pass
+
+        retry_resp = self._session_get(session=session, url=target_url, referer=referer, timeout=30)
+        retry_text = retry_resp.text or ""
+        logger.info(
+            f"[wuaipojiesign] {stage} 回灌cookie后重试: status={getattr(retry_resp, 'status_code', None)}, len={len(retry_text)}, final_url={getattr(retry_resp, 'url', '')}"
+        )
+        return retry_resp, retry_text
 
     def _ua_candidates(self) -> List[str]:
         if self._ua_mode == "desktop":
@@ -375,7 +415,19 @@ class wuaipojiesign(_PluginBase):
         home_resp = self._session_get(session=session, url=home_url, referer=None, timeout=30)
         home_text = home_resp.text or ""
         if self._is_js_challenge(home_text):
-            return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(home)"}
+            retried = self._handle_js_challenge_once(
+                session=session,
+                content=home_text,
+                target_url=home_url,
+                referer=None,
+                stage="home",
+                client_name=client_name,
+                ua_kind=ua_kind,
+            )
+            if retried:
+                home_resp, home_text = retried
+            if self._is_js_challenge(home_text):
+                return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(home)"}
 
         if self._is_cookie_invalid(home_text):
             return {"success": False, "message": "Cookie 失效或未登录"}
@@ -394,7 +446,19 @@ class wuaipojiesign(_PluginBase):
             f"[wuaipojiesign] apply 响应: status={getattr(apply_resp, 'status_code', None)}, len={len(apply_text)}, final_url={getattr(apply_resp, 'url', '')}"
         )
         if self._is_js_challenge(apply_text):
-            return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(apply)"}
+            retried = self._handle_js_challenge_once(
+                session=session,
+                content=apply_text,
+                target_url=apply_link,
+                referer=home_url,
+                stage="apply",
+                client_name=client_name,
+                ua_kind=ua_kind,
+            )
+            if retried:
+                apply_resp, apply_text = retried
+            if self._is_js_challenge(apply_text):
+                return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(apply)"}
 
         if self._is_cookie_invalid(apply_text):
             return {"success": False, "message": "签到请求被重定向到登录页，Cookie 可能已失效"}
@@ -413,7 +477,19 @@ class wuaipojiesign(_PluginBase):
                 f"[wuaipojiesign] draw 响应: status={getattr(draw_resp, 'status_code', None)}, len={len(draw_text)}, final_url={getattr(draw_resp, 'url', '')}"
             )
             if self._is_js_challenge(draw_text):
-                return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(draw)"}
+                retried = self._handle_js_challenge_once(
+                    session=session,
+                    content=draw_text,
+                    target_url=draw_link,
+                    referer=apply_link,
+                    stage="draw",
+                    client_name=client_name,
+                    ua_kind=ua_kind,
+                )
+                if retried:
+                    draw_resp, draw_text = retried
+                if self._is_js_challenge(draw_text):
+                    return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(draw)"}
             if self._is_cookie_invalid(draw_text):
                 return {"success": False, "message": "领奖请求登录失效，Cookie 可能已过期"}
             if self._is_already_signed(draw_text):
