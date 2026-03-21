@@ -4,6 +4,7 @@ import html
 import random
 import re
 import time
+from http.cookies import SimpleCookie
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin
@@ -177,6 +178,32 @@ class wuaipojiesign(_PluginBase):
             allow_redirects=True,
         )
 
+    def _build_session(self):
+        if requests is None:
+            raise RuntimeError("requests 未安装")
+        session = requests.Session()
+        session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            }
+        )
+        session.proxies = self._get_proxies() or {}
+        session.verify = self._verify_ssl
+
+        # 把配置中的 Cookie 串写入会话，让后续请求同时保留服务端新增 cookie
+        try:
+            raw_cookie = self._cookie or ""
+            parsed = SimpleCookie()
+            parsed.load(raw_cookie)
+            for key, morsel in parsed.items():
+                session.cookies.set(key, morsel.value)
+        except Exception:
+            # 回退到 Header Cookie
+            session.headers["Cookie"] = self._cookie
+        return session
+
     def _wait_random_interval(self):
         try:
             if self._max_delay >= self._min_delay > 0:
@@ -261,8 +288,11 @@ class wuaipojiesign(_PluginBase):
 
     def _do_sign_once(self) -> Dict[str, Any]:
         home_url = f"{self._base_url}/"
+        direct_apply_url = f"{self._base_url}/home.php?mod=task&do=apply&id={self._task_id}"
+        direct_draw_url = f"{self._base_url}/home.php?mod=task&do=draw&id={self._task_id}"
+        session = self._build_session()
         logger.info("[wuaipojiesign] 开始访问首页并解析签到入口")
-        home_resp = self._http_get(home_url)
+        home_resp = session.get(home_url, timeout=30, allow_redirects=True)
         home_text = home_resp.text or ""
 
         if self._is_cookie_invalid(home_text):
@@ -272,13 +302,15 @@ class wuaipojiesign(_PluginBase):
         if not apply_link:
             if self._is_already_signed(home_text):
                 return {"success": True, "already_signed": True, "message": "今日已签到"}
-            return {"success": False, "message": "未找到签到入口，请检查 task_id 或页面结构是否变化"}
+            logger.info("[wuaipojiesign] 首页未解析到 apply，尝试直连 apply URL")
+            apply_link = direct_apply_url
         logger.info(f"[wuaipojiesign] 解析到 apply 链接: {apply_link}")
 
-        apply_resp = self._http_get(apply_link, referer=home_url)
+        session.headers["Referer"] = home_url
+        apply_resp = session.get(apply_link, timeout=30, allow_redirects=True)
         apply_text = apply_resp.text or ""
         logger.info(
-            f"[wuaipojiesign] apply 响应: status={getattr(apply_resp, 'status_code', None)}, len={len(apply_text)}"
+            f"[wuaipojiesign] apply 响应: status={getattr(apply_resp, 'status_code', None)}, len={len(apply_text)}, final_url={getattr(apply_resp, 'url', '')}"
         )
 
         if self._is_cookie_invalid(apply_text):
@@ -288,12 +320,15 @@ class wuaipojiesign(_PluginBase):
             return {"success": True, "already_signed": True, "message": "今日已签到"}
 
         draw_link = self._extract_draw_link(apply_text)
+        if not draw_link and any(key in apply_text for key in ["任务申请成功", "领取奖励", "do=draw"]):
+            draw_link = direct_draw_url
         if draw_link:
             logger.info(f"[wuaipojiesign] 解析到 draw 链接: {draw_link}")
-            draw_resp = self._http_get(draw_link, referer=apply_link)
+            session.headers["Referer"] = apply_link
+            draw_resp = session.get(draw_link, timeout=30, allow_redirects=True)
             draw_text = draw_resp.text or ""
             logger.info(
-                f"[wuaipojiesign] draw 响应: status={getattr(draw_resp, 'status_code', None)}, len={len(draw_text)}"
+                f"[wuaipojiesign] draw 响应: status={getattr(draw_resp, 'status_code', None)}, len={len(draw_text)}, final_url={getattr(draw_resp, 'url', '')}"
             )
             if self._is_cookie_invalid(draw_text):
                 return {"success": False, "message": "领奖请求登录失效，Cookie 可能已过期"}
@@ -345,14 +380,14 @@ class wuaipojiesign(_PluginBase):
                 result = self._do_sign_once()
                 if result.get("success"):
                     break
-                logger.warning(
+                logger.info(
                     f"[wuaipojiesign] 第 {attempt}/{retries} 次签到失败: {result.get('message', '未知错误')}"
                 )
                 if attempt < retries:
                     time.sleep(2)
             except Exception as err:
                 last_err = err
-                logger.warning(f"[wuaipojiesign] 第 {attempt}/{retries} 次请求异常: {err}")
+                logger.info(f"[wuaipojiesign] 第 {attempt}/{retries} 次请求异常: {err}")
                 if attempt < retries:
                     time.sleep(2)
 
