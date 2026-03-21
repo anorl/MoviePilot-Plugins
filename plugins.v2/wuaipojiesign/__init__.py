@@ -41,7 +41,7 @@ class wuaipojiesign(_PluginBase):
     plugin_name = "吾爱破解论坛签到"
     plugin_desc = "自动完成 52pojie 每日打卡签到，支持定时任务与通知。"
     plugin_icon = "https://www.52pojie.cn/favicon.ico"
-    plugin_version = "0.1.5"
+    plugin_version = "0.1.6"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "wuaipojiesign_"
@@ -214,6 +214,15 @@ class wuaipojiesign(_PluginBase):
         return any(k in (content or "") for k in keys)
 
     @staticmethod
+    def _is_waf_text_verify(content: str = "", final_url: str = "") -> bool:
+        text = content or ""
+        url = (final_url or "").lower()
+        if "waf_text_verify.html" in url:
+            return True
+        keys = ["访问验证", "waf_text_verify", "请完成验证", "human verification"]
+        return any(k in text for k in keys)
+
+    @staticmethod
     def _extract_js_cookies(content: str) -> Dict[str, str]:
         text = content or ""
         cookies: Dict[str, str] = {}
@@ -319,6 +328,7 @@ class wuaipojiesign(_PluginBase):
 
     def _session_get(self, session, url: str, referer: Optional[str] = None, timeout: int = 30):
         if self._use_flaresolverr and self._flaresolverr_url:
+            logger.info(f"[wuaipojiesign] 请求通过 FlareSolverr: {url}")
             return self._flaresolverr_get(session=session, url=url, referer=referer, timeout=timeout)
         if referer:
             session.headers["Referer"] = referer
@@ -494,6 +504,8 @@ class wuaipojiesign(_PluginBase):
 
         if self._is_cookie_invalid(home_text):
             return {"success": False, "message": "Cookie 失效或未登录"}
+        if self._is_waf_text_verify(home_text, getattr(home_resp, "url", "")):
+            return {"success": False, "retryable": False, "message": "命中站点访问验证页(waf_text_verify)，当前请求环境被风控"}
 
         apply_link = self._extract_apply_link(home_text)
         if not apply_link:
@@ -525,6 +537,12 @@ class wuaipojiesign(_PluginBase):
 
         if self._is_cookie_invalid(apply_text):
             return {"success": False, "message": "签到请求被重定向到登录页，Cookie 可能已失效"}
+        if self._is_waf_text_verify(apply_text, getattr(apply_resp, "url", "")):
+            return {
+                "success": False,
+                "retryable": False,
+                "message": "命中站点访问验证页(waf_text_verify)，需先在同网络环境人工通过验证后再试",
+            }
 
         if self._is_already_signed(apply_text):
             return {"success": True, "already_signed": True, "message": "今日已签到"}
@@ -555,6 +573,12 @@ class wuaipojiesign(_PluginBase):
                     return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(draw)"}
             if self._is_cookie_invalid(draw_text):
                 return {"success": False, "message": "领奖请求登录失效，Cookie 可能已过期"}
+            if self._is_waf_text_verify(draw_text, getattr(draw_resp, "url", "")):
+                return {
+                    "success": False,
+                    "retryable": False,
+                    "message": "领取奖励命中访问验证页(waf_text_verify)，需先人工完成验证",
+                }
             if self._is_already_signed(draw_text):
                 return {"success": True, "already_signed": True, "message": "今日已签到"}
             if self._is_sign_success(draw_text):
@@ -640,6 +664,8 @@ class wuaipojiesign(_PluginBase):
                 logger.info(
                     f"[wuaipojiesign] 第 {attempt}/{retries} 次签到失败: {result.get('message', '未知错误')}"
                 )
+                if result.get("retryable") is False:
+                    break
                 if attempt < retries:
                     time.sleep(2)
             except Exception as err:
