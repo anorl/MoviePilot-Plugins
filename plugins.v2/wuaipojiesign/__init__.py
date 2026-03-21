@@ -5,6 +5,7 @@ import random
 import re
 import time
 from http.cookies import SimpleCookie
+from types import SimpleNamespace
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin
@@ -40,7 +41,7 @@ class wuaipojiesign(_PluginBase):
     plugin_name = "吾爱破解论坛签到"
     plugin_desc = "自动完成 52pojie 每日打卡签到，支持定时任务与通知。"
     plugin_icon = "https://www.52pojie.cn/favicon.ico"
-    plugin_version = "0.1.4"
+    plugin_version = "0.1.5"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "wuaipojiesign_"
@@ -59,6 +60,8 @@ class wuaipojiesign(_PluginBase):
 
     _use_proxy = True
     _verify_ssl = True
+    _use_flaresolverr = False
+    _flaresolverr_url = ""
     _max_retries = 3
     _min_delay = 3
     _max_delay = 8
@@ -86,6 +89,8 @@ class wuaipojiesign(_PluginBase):
 
             self._use_proxy = bool(config.get("use_proxy", True))
             self._verify_ssl = bool(config.get("verify_ssl", True))
+            self._use_flaresolverr = bool(config.get("use_flaresolverr", False))
+            self._flaresolverr_url = (config.get("flaresolverr_url") or "").strip().rstrip("/")
 
             try:
                 self._max_retries = int(config.get("max_retries", 3))
@@ -124,6 +129,8 @@ class wuaipojiesign(_PluginBase):
                     "ua_mode": self._ua_mode,
                     "use_proxy": self._use_proxy,
                     "verify_ssl": self._verify_ssl,
+                    "use_flaresolverr": self._use_flaresolverr,
+                    "flaresolverr_url": self._flaresolverr_url,
                     "max_retries": self._max_retries,
                     "min_delay": self._min_delay,
                     "max_delay": self._max_delay,
@@ -311,6 +318,8 @@ class wuaipojiesign(_PluginBase):
         return session
 
     def _session_get(self, session, url: str, referer: Optional[str] = None, timeout: int = 30):
+        if self._use_flaresolverr and self._flaresolverr_url:
+            return self._flaresolverr_get(session=session, url=url, referer=referer, timeout=timeout)
         if referer:
             session.headers["Referer"] = referer
         return session.get(
@@ -318,6 +327,60 @@ class wuaipojiesign(_PluginBase):
             timeout=timeout,
             allow_redirects=True,
             verify=self._verify_ssl,
+        )
+
+    @staticmethod
+    def _session_cookie_array(session) -> List[Dict[str, str]]:
+        items: List[Dict[str, str]] = []
+        try:
+            for c in session.cookies:
+                item = {"name": c.name, "value": c.value}
+                if getattr(c, "domain", None):
+                    item["domain"] = c.domain
+                if getattr(c, "path", None):
+                    item["path"] = c.path
+                items.append(item)
+        except Exception:
+            pass
+        return items
+
+    def _flaresolverr_get(self, session, url: str, referer: Optional[str] = None, timeout: int = 30):
+        if requests is None:
+            raise RuntimeError("requests 未安装，无法调用 FlareSolverr")
+        endpoint = f"{self._flaresolverr_url}/v1"
+        headers = {"User-Agent": session.headers.get("User-Agent", self._ua_string("desktop"))}
+        if referer:
+            headers["Referer"] = referer
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": max(30000, int(timeout * 1000)),
+            "session": "wuaipojiesign",
+            "headers": headers,
+            "cookies": self._session_cookie_array(session),
+        }
+        resp = requests.post(
+            endpoint,
+            json=payload,
+            timeout=timeout + 20,
+            verify=self._verify_ssl,
+            proxies=self._get_proxies(),
+        )
+        data = resp.json() if resp.content else {}
+        if not isinstance(data, dict) or data.get("status") != "ok":
+            raise RuntimeError(f"FlareSolverr 返回异常: {data}")
+        solution = data.get("solution") or {}
+        # 把 FlareSolverr 侧新cookie回灌到会话
+        for ck in solution.get("cookies") or []:
+            try:
+                session.cookies.set(ck.get("name"), ck.get("value"), domain=ck.get("domain"), path=ck.get("path", "/"))
+            except Exception:
+                pass
+        return SimpleNamespace(
+            status_code=solution.get("status", 200),
+            text=solution.get("response", "") or "",
+            url=solution.get("url", url),
+            headers={},
         )
 
     def _wait_random_interval(self):
@@ -674,6 +737,13 @@ class wuaipojiesign(_PluginBase):
                                 "component": "VCol",
                                 "props": {"cols": 12, "md": 3},
                                 "content": [
+                                    {"component": "VSwitch", "props": {"model": "use_flaresolverr", "label": "启用FlareSolverr"}}
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 3},
+                                "content": [
                                     {"component": "VSwitch", "props": {"model": "onlyonce", "label": "立即运行一次"}}
                                 ],
                             },
@@ -682,6 +752,20 @@ class wuaipojiesign(_PluginBase):
                     {
                         "component": "VRow",
                         "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 6},
+                                "content": [
+                                    {
+                                        "component": "VTextField",
+                                        "props": {
+                                            "model": "flaresolverr_url",
+                                            "label": "FlareSolverr地址",
+                                            "placeholder": "http://127.0.0.1:8191",
+                                        },
+                                    }
+                                ],
+                            },
                             {
                                 "component": "VCol",
                                 "props": {"cols": 12, "md": 6},
@@ -862,6 +946,8 @@ class wuaipojiesign(_PluginBase):
             "ua_mode": "auto",
             "use_proxy": True,
             "verify_ssl": True,
+            "use_flaresolverr": False,
+            "flaresolverr_url": "",
             "max_retries": 3,
             "min_delay": 3,
             "max_delay": 8,
