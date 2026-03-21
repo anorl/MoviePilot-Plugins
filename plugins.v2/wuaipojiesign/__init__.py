@@ -19,6 +19,18 @@ from app.plugins import _PluginBase
 from app.schemas import NotificationType
 
 try:
+    import cloudscraper
+    HAS_CLOUDSCRAPER = True
+except Exception:
+    HAS_CLOUDSCRAPER = False
+
+try:
+    from curl_cffi import requests as curl_requests
+    HAS_CURL_CFFI = True
+except Exception:
+    HAS_CURL_CFFI = False
+
+try:
     import requests
 except Exception:
     requests = None
@@ -28,7 +40,7 @@ class wuaipojiesign(_PluginBase):
     plugin_name = "吾爱破解论坛签到"
     plugin_desc = "自动完成 52pojie 每日打卡签到，支持定时任务与通知。"
     plugin_icon = "https://www.52pojie.cn/favicon.ico"
-    plugin_version = "0.1.1"
+    plugin_version = "0.1.3"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "wuaipojiesign_"
@@ -43,6 +55,7 @@ class wuaipojiesign(_PluginBase):
     _cookie = ""
     _base_url = "https://www.52pojie.cn"
     _task_id = 2
+    _ua_mode = "auto"
 
     _use_proxy = True
     _verify_ssl = True
@@ -67,6 +80,9 @@ class wuaipojiesign(_PluginBase):
                 self._task_id = int(config.get("task_id", 2))
             except Exception:
                 self._task_id = 2
+            self._ua_mode = (config.get("ua_mode") or "auto").strip().lower()
+            if self._ua_mode not in {"auto", "desktop", "mobile"}:
+                self._ua_mode = "auto"
 
             self._use_proxy = bool(config.get("use_proxy", True))
             self._verify_ssl = bool(config.get("verify_ssl", True))
@@ -105,6 +121,7 @@ class wuaipojiesign(_PluginBase):
                     "cookie": self._cookie,
                     "base_url": self._base_url,
                     "task_id": self._task_id,
+                    "ua_mode": self._ua_mode,
                     "use_proxy": self._use_proxy,
                     "verify_ssl": self._verify_ssl,
                     "max_retries": self._max_retries,
@@ -178,19 +195,68 @@ class wuaipojiesign(_PluginBase):
             allow_redirects=True,
         )
 
-    def _build_session(self):
-        if requests is None:
-            raise RuntimeError("requests 未安装")
-        session = requests.Session()
+    @staticmethod
+    def _is_js_challenge(content: str) -> bool:
+        keys = [
+            "Please enable JavaScript and refresh the page",
+            "<noscript>",
+            "function L(",
+            "document.cookie",
+            "jschl",
+        ]
+        return any(k in (content or "") for k in keys)
+
+    def _ua_candidates(self) -> List[str]:
+        if self._ua_mode == "desktop":
+            return ["desktop"]
+        if self._ua_mode == "mobile":
+            return ["mobile"]
+        # auto: 先移动端再桌面端，优先命中你提供的移动结构
+        return ["mobile", "desktop"]
+
+    def _ua_string(self, ua_kind: str) -> str:
+        if ua_kind == "mobile":
+            return (
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+            )
+        return (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+        )
+
+    def _build_session(self, client: str = "requests", ua_kind: str = "desktop"):
+        if client == "cloudscraper":
+            if not HAS_CLOUDSCRAPER:
+                raise RuntimeError("cloudscraper 未安装")
+            try:
+                session = cloudscraper.create_scraper(browser="chrome")
+            except Exception:
+                session = cloudscraper.create_scraper()
+        elif client == "curl_cffi":
+            if not HAS_CURL_CFFI:
+                raise RuntimeError("curl_cffi 未安装")
+            session = curl_requests.Session(impersonate="chrome124")
+        else:
+            if requests is None:
+                raise RuntimeError("requests 未安装")
+            session = requests.Session()
+
         session.headers.update(
             {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+                "User-Agent": self._ua_string(ua_kind),
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             }
         )
-        session.proxies = self._get_proxies() or {}
-        session.verify = self._verify_ssl
+        try:
+            session.proxies = self._get_proxies() or {}
+        except Exception:
+            pass
+        try:
+            session.verify = self._verify_ssl
+        except Exception:
+            pass
 
         # 把配置中的 Cookie 串写入会话，让后续请求同时保留服务端新增 cookie
         try:
@@ -204,6 +270,16 @@ class wuaipojiesign(_PluginBase):
             session.headers["Cookie"] = self._cookie
         return session
 
+    def _session_get(self, session, url: str, referer: Optional[str] = None, timeout: int = 30):
+        if referer:
+            session.headers["Referer"] = referer
+        return session.get(
+            url,
+            timeout=timeout,
+            allow_redirects=True,
+            verify=self._verify_ssl,
+        )
+
     def _wait_random_interval(self):
         try:
             if self._max_delay >= self._min_delay > 0:
@@ -213,14 +289,19 @@ class wuaipojiesign(_PluginBase):
             pass
 
     def _extract_apply_link(self, content: str) -> Optional[str]:
-        pattern = rf'href="([^"]*home\.php\?mod=task(?:&amp;|&)do=apply(?:&amp;|&)id={self._task_id}[^"]*)"'
-        matched = re.search(pattern, content, flags=re.IGNORECASE)
-        if not matched:
-            matched = re.search(r'href="([^"]*home\.php\?mod=task(?:&amp;|&)do=apply[^"]*)"', content, flags=re.IGNORECASE)
-        if not matched:
-            return None
-        href = html.unescape(matched.group(1))
-        return urljoin(f"{self._base_url}/", href)
+        patterns = [
+            rf'href="([^"]*home\.php\?mod=task(?:&amp;|&)do=apply(?:&amp;|&)id={self._task_id}[^"]*)"',
+            rf"href='([^']*home\.php\?mod=task(?:&amp;|&)do=apply(?:&amp;|&)id={self._task_id}[^']*)'",
+            r'href="([^"]*home\.php\?mod=task(?:&amp;|&)do=apply[^"]*)"',
+            r"href='([^']*home\.php\?mod=task(?:&amp;|&)do=apply[^']*)'",
+            rf"(home\.php\?mod=task(?:&amp;|&)do=apply(?:&amp;|&)id={self._task_id}[^\s<\"']*)",
+        ]
+        for pattern in patterns:
+            matched = re.search(pattern, content, flags=re.IGNORECASE)
+            if matched:
+                href = html.unescape(matched.group(1))
+                return urljoin(f"{self._base_url}/", href)
+        return None
 
     def _extract_draw_link(self, content: str) -> Optional[str]:
         # 兼容 href / JS 字符串 / inajax 返回中的 draw 链接
@@ -286,14 +367,15 @@ class wuaipojiesign(_PluginBase):
                 return matched.group(1)
         return None
 
-    def _do_sign_once(self) -> Dict[str, Any]:
+    def _do_sign_once_with_session(self, session, client_name: str, ua_kind: str) -> Dict[str, Any]:
         home_url = f"{self._base_url}/"
         direct_apply_url = f"{self._base_url}/home.php?mod=task&do=apply&id={self._task_id}"
         direct_draw_url = f"{self._base_url}/home.php?mod=task&do=draw&id={self._task_id}"
-        session = self._build_session()
-        logger.info("[wuaipojiesign] 开始访问首页并解析签到入口")
-        home_resp = session.get(home_url, timeout=30, allow_redirects=True)
+        logger.info(f"[wuaipojiesign] 使用 {client_name} 客户端({ua_kind} UA)访问首页并解析签到入口")
+        home_resp = self._session_get(session=session, url=home_url, referer=None, timeout=30)
         home_text = home_resp.text or ""
+        if self._is_js_challenge(home_text):
+            return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(home)"}
 
         if self._is_cookie_invalid(home_text):
             return {"success": False, "message": "Cookie 失效或未登录"}
@@ -306,12 +388,13 @@ class wuaipojiesign(_PluginBase):
             apply_link = direct_apply_url
         logger.info(f"[wuaipojiesign] 解析到 apply 链接: {apply_link}")
 
-        session.headers["Referer"] = home_url
-        apply_resp = session.get(apply_link, timeout=30, allow_redirects=True)
+        apply_resp = self._session_get(session=session, url=apply_link, referer=home_url, timeout=30)
         apply_text = apply_resp.text or ""
         logger.info(
             f"[wuaipojiesign] apply 响应: status={getattr(apply_resp, 'status_code', None)}, len={len(apply_text)}, final_url={getattr(apply_resp, 'url', '')}"
         )
+        if self._is_js_challenge(apply_text):
+            return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(apply)"}
 
         if self._is_cookie_invalid(apply_text):
             return {"success": False, "message": "签到请求被重定向到登录页，Cookie 可能已失效"}
@@ -324,12 +407,13 @@ class wuaipojiesign(_PluginBase):
             draw_link = direct_draw_url
         if draw_link:
             logger.info(f"[wuaipojiesign] 解析到 draw 链接: {draw_link}")
-            session.headers["Referer"] = apply_link
-            draw_resp = session.get(draw_link, timeout=30, allow_redirects=True)
+            draw_resp = self._session_get(session=session, url=draw_link, referer=apply_link, timeout=30)
             draw_text = draw_resp.text or ""
             logger.info(
                 f"[wuaipojiesign] draw 响应: status={getattr(draw_resp, 'status_code', None)}, len={len(draw_text)}, final_url={getattr(draw_resp, 'url', '')}"
             )
+            if self._is_js_challenge(draw_text):
+                return {"success": False, "retryable": True, "js_challenge": True, "message": f"{client_name}/{ua_kind} 命中 JS 风控页(draw)"}
             if self._is_cookie_invalid(draw_text):
                 return {"success": False, "message": "领奖请求登录失效，Cookie 可能已过期"}
             if self._is_already_signed(draw_text):
@@ -353,7 +437,41 @@ class wuaipojiesign(_PluginBase):
 
         snippet = re.sub(r"\s+", " ", apply_text)[:260]
         logger.warning(f"[wuaipojiesign] apply 未识别成功，响应片段: {snippet}")
-        return {"success": False, "message": "签到请求未返回成功状态，可能页面规则已变更"}
+        return {"success": False, "retryable": True, "message": "签到请求未返回成功状态，可能页面规则已变更"}
+
+    def _do_sign_once(self) -> Dict[str, Any]:
+        clients: List[str] = []
+        if HAS_CLOUDSCRAPER:
+            clients.append("cloudscraper")
+        if HAS_CURL_CFFI:
+            clients.append("curl_cffi")
+        clients.append("requests")
+
+        last_result: Dict[str, Any] = {"success": False, "message": "未知错误"}
+        for client_name in clients:
+            for ua_kind in self._ua_candidates():
+                try:
+                    session = self._build_session(client=client_name, ua_kind=ua_kind)
+                    result = self._do_sign_once_with_session(session=session, client_name=client_name, ua_kind=ua_kind)
+                    if result.get("success"):
+                        return result
+                    last_result = result
+                    if result.get("js_challenge"):
+                        logger.info(f"[wuaipojiesign] {client_name}/{ua_kind} 被 JS 风控拦截，继续尝试")
+                        continue
+                    return result
+                except Exception as err:
+                    last_result = {"success": False, "retryable": True, "message": f"{client_name}/{ua_kind} 请求异常: {err}"}
+                    logger.info(f"[wuaipojiesign] {client_name}/{ua_kind} 请求异常，继续尝试: {err}")
+                    continue
+
+        if last_result.get("js_challenge"):
+            return {
+                "success": False,
+                "retryable": True,
+                "message": "触发站点 JS 风控，已尝试 cloudscraper/curl_cffi/requests + 移动/桌面 UA，仍被拦截",
+            }
+        return last_result
 
     def sign(self):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -540,6 +658,24 @@ class wuaipojiesign(_PluginBase):
                                 "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
+                                        "component": "VSelect",
+                                        "props": {
+                                            "model": "ua_mode",
+                                            "label": "请求UA模式",
+                                            "items": [
+                                                {"title": "自动(移动优先)", "value": "auto"},
+                                                {"title": "仅移动端", "value": "mobile"},
+                                                {"title": "仅桌面端", "value": "desktop"}
+                                            ]
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 4},
+                                "content": [
+                                    {
                                         "component": "VTextField",
                                         "props": {
                                             "model": "max_retries",
@@ -647,6 +783,7 @@ class wuaipojiesign(_PluginBase):
             "cookie": "",
             "base_url": "https://www.52pojie.cn",
             "task_id": 2,
+            "ua_mode": "auto",
             "use_proxy": True,
             "verify_ssl": True,
             "max_retries": 3,
