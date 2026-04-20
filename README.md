@@ -6,7 +6,7 @@
 ## 插件列表
 
 - `deepfloodsign`：DeepFlood 论坛每日签到
-- `nodeseeksigncc`：NodeSeek 论坛每日签到（插件显示名：`NodeSeek论坛签到`）
+- `nodeseeksigncc`：NodeSeek 论坛每日签到
 
 ## 安装
 
@@ -16,7 +16,7 @@
 
 ## deepfloodsign（DeepFlood）
 
-用于 DeepFlood 论坛签到，支持 CookieCloud、定时任务、通知、重试、历史记录。  
+用于 DeepFlood 论坛签到，支持 CookieCloud。  
 基础配置：
 
 - `site_url`：站点地址（如 `https://www.deepflood.com`）
@@ -32,7 +32,7 @@
 
 ## nodeseeksigncc（NodeSeek）
 
-用于 NodeSeek 论坛签到，插件在 MoviePilot 中显示名为 `NodeSeek论坛签到`，支持 CookieCloud、定时任务、通知、重试、历史记录。  
+用于 NodeSeek 论坛签到，支持 CookieCloud。  
 基础配置：
 
 - `site_url`：站点地址（默认 `https://www.nodeseek.com`）
