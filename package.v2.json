@@ -21,15 +21,16 @@
       "v0.1.0": "初始版本：支持 URL/Cookie/API 路径与方法配置、定时服务、历史记录与多请求后备。"
     }
   },
-  "nodeseeksign": {
-    "name": "NodeSeek论坛签到",
+  "nodeseeksigncc": {
+    "name": "NodeSeek论坛签到（CookieCloud版）",
     "description": "自动完成 NodeSeek 论坛每日签到，支持 MoviePilot CookieCloud、通知、重试与历史记录。",
     "labels": "站点",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "icon": "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/nodeseeksign.png",
     "author": "anorl",
     "level": 2,
     "history": {
+      "v0.1.1": "改为独立唯一插件标识，避免与现有 NodeSeek 插件冲突。",
       "v0.1.0": "初始版本：基于现有 NodeSeek/DeepFlood 签到逻辑融合实现，支持 CookieCloud、通知、重试与历史记录。"
     }
   },
