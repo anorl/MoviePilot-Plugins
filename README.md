@@ -6,7 +6,7 @@
 ## 插件列表
 
 - `deepfloodsign`：DeepFlood 论坛每日签到
-- `wuaipojiesign`：吾爱破解（52pojie）每日打卡签到
+- `nodeseeksigncc`：NodeSeek 论坛每日签到（插件显示名：`NodeSeek论坛签到`）
 
 ## 安装
 
@@ -16,33 +16,35 @@
 
 ## deepfloodsign（DeepFlood）
 
-用于 DeepFlood 论坛签到，支持定时任务、通知、重试、历史记录。  
+用于 DeepFlood 论坛签到，支持 CookieCloud、定时任务、通知、重试、历史记录。  
 基础配置：
 
 - `site_url`：站点地址（如 `https://www.deepflood.com`）
-- `cookie`：浏览器登录态 Cookie
-- `cron`：定时表达式（默认 `0 9 * * *`）
-- `attendance_path` + `attendance_method`：签到接口路径与方法
-
-排错建议：
-
-- 失败多数来自 Cookie 失效或签到接口路径不正确。
-- 先在浏览器 Network 抓“签到按钮”真实请求，再回填路径与方法。
-
-## wuaipojiesign（52pojie）
-
-用于吾爱破解论坛自动打卡签到，支持定时任务、通知、重试、历史记录。  
-基础配置：
-
-- `base_url`：站点地址（默认 `https://www.52pojie.cn`）
-- `cookie`：浏览器登录态 Cookie
-- `task_id`：任务 ID（默认 `2`）
+- `cookie_source`：Cookie 来源（手工填写 / CookieCloud）
+- `cookie`：浏览器登录态 Cookie（仅手工模式使用）
+- `member_id`：用户 ID（可选，用于获取用户名/等级/鸡腿）
 - `cron`：定时表达式（默认 `0 9 * * *`）
 
 说明：
 
-- 插件会先解析首页打卡入口（`task apply`），必要时继续执行 `task draw`。
-- 若站点页面结构调整，可能需要更新 `task_id` 或适配解析规则。
+- 若使用 CookieCloud，请确保浏览器扩展已把目标站点域名同步到 CookieCloud 服务端。
+- 插件支持 MoviePilot 本地 CookieCloud 和远端 CookieCloud 两种模式。
+
+## nodeseeksigncc（NodeSeek）
+
+用于 NodeSeek 论坛签到，插件在 MoviePilot 中显示名为 `NodeSeek论坛签到`，支持 CookieCloud、定时任务、通知、重试、历史记录。  
+基础配置：
+
+- `site_url`：站点地址（默认 `https://www.nodeseek.com`）
+- `cookie_source`：Cookie 来源（手工填写 / CookieCloud）
+- `cookie`：浏览器登录态 Cookie（仅手工模式使用）
+- `member_id`：用户 ID（可选，用于获取用户名/等级/鸡腿）
+- `cron`：定时表达式（默认 `0 9 * * *`）
+
+说明：
+
+- 为避免与其他仓库中的同名 NodeSeek 插件冲突，本仓库内部插件标识使用 `nodeseeksigncc`。
+- 若使用 CookieCloud，请确保浏览器扩展已把 `nodeseek` 相关域名同步到 CookieCloud 服务端。
 
 ## 免责声明
 
