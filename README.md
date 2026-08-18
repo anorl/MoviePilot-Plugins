@@ -5,6 +5,7 @@
 
 ## 插件列表
 
+- `ptingsign`：蜂巢每日签到
 - `deepfloodsign`：DeepFlood 论坛每日签到
 - `nodeseeksigncc`：NodeSeek 论坛每日签到
 
@@ -13,6 +14,21 @@
 1. 在 MoviePilot 中添加本仓库为第三方插件仓库。
 2. 在插件市场安装目标插件。
 3. 到插件配置页填写参数并启用。
+
+## ptingsign（蜂巢）
+
+用于 [蜂巢](https://pting.club/) 每日签到，默认从 CookieCloud 获取登录态。
+基础配置：
+
+- `site_url`：站点地址（默认 `https://pting.club`）
+- `cookie_source`：Cookie 来源（默认 CookieCloud，也支持手工填写）
+- `cron`：定时表达式（默认 `0 9 * * *`）
+
+说明：
+
+- 请先在浏览器中登录蜂巢，并确认 CookieCloud 已同步 `pting.club`。
+- 插件识别“签到成功”和“今日已签到”，并记录奖励、当前积分及连续签到天数。
+- 插件使用蜂巢当前网页调用的 `POST /api/check-in` 接口。
 
 ## deepfloodsign（DeepFlood）
 
