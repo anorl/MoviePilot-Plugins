@@ -3,11 +3,12 @@
     "name": "蜂巢签到",
     "description": "自动完成蜂巢每日签到，支持 CookieCloud",
     "labels": "站点",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/ptingsign.png",
     "author": "anorl",
     "level": 2,
     "history": {
+      "v0.1.1": "修正签到接口 points 字段为积分余额，并新增今日积分与积分余额在通知和历史记录中的展示。",
       "v0.1.0": "初始版本：按蜂巢当前签到接口实现，支持 CookieCloud、已签到识别、通知、重试与历史记录。"
     }
   },

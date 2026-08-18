@@ -2,6 +2,7 @@
 
 import json
 import random
+import re
 import time
 from datetime import datetime, timedelta
 from hashlib import md5
@@ -35,7 +36,7 @@ class ptingsign(_PluginBase):
     plugin_name = "蜂巢签到"
     plugin_desc = "自动完成蜂巢每日签到，支持 CookieCloud"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/ptingsign.png"
-    plugin_version = "0.1.0"
+    plugin_version = "0.1.1"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "ptingsign_"
@@ -409,7 +410,7 @@ class ptingsign(_PluginBase):
         field_map = {
             "date": "sign_date",
             "reward": "reward",
-            "points": "points",
+            "points": "points_balance",
             "currentStreak": "current_streak",
             "maxStreak": "max_streak",
         }
@@ -417,6 +418,55 @@ class ptingsign(_PluginBase):
             if data.get(api_field) is not None:
                 result[result_field] = data[api_field]
         return result
+
+    @staticmethod
+    def _parse_points_summary_html(html_text: str) -> Dict[str, Any]:
+        """从蜂巢积分明细页的 Next.js 服务端数据中提取积分汇总。"""
+        normalized = (html_text or "").replace('\\"', '"')
+        patterns = {
+            "points_balance": r'当前余额.{0,2500}?"value"\s*:\s*(-?\d+(?:\.\d+)?)',
+            "today_points": r'今日变动：?.{0,1500}?"value"\s*:\s*(-?\d+(?:\.\d+)?)',
+        }
+        summary = {}
+        for field, pattern in patterns.items():
+            match = re.search(pattern, normalized, flags=re.DOTALL)
+            if not match:
+                continue
+            value = float(match.group(1))
+            summary[field] = int(value) if value.is_integer() else value
+        return summary
+
+    def _fetch_points_summary(self, cookie: str) -> Dict[str, Any]:
+        url = f"{self._site_url}/settings?tab=points"
+        proxies = self._get_proxies()
+        headers = self._build_headers(cookie)
+        headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+        if HAS_CURL_CFFI:
+            session = curl_requests.Session(impersonate="chrome")
+            if proxies:
+                session.proxies = proxies
+            response = session.get(
+                url, headers=headers, timeout=30, verify=self._verify_ssl
+            )
+        else:
+            if requests is None:
+                raise RuntimeError("requests 与 curl_cffi 均未安装")
+            response = requests.get(
+                url, headers=headers, proxies=proxies,
+                timeout=30, verify=self._verify_ssl,
+            )
+
+        if getattr(response, "status_code", 0) != 200:
+            raise RuntimeError(f"积分明细页返回 HTTP {getattr(response, 'status_code', 0)}")
+        summary = self._parse_points_summary_html(getattr(response, "text", ""))
+        if not summary:
+            raise RuntimeError("未能从积分明细页解析积分汇总")
+        logger.info(
+            f"[ptingsign] 积分汇总: 今日积分={summary.get('today_points', '未知')}, "
+            f"积分余额={summary.get('points_balance', '未知')}"
+        )
+        return summary
 
     def _run_check_in(self, cookie: str) -> Dict[str, Any]:
         response = self._post_check_in(cookie)
@@ -447,6 +497,11 @@ class ptingsign(_PluginBase):
 
         if result is None:
             result = {"success": False, "message": f"重试后仍失败: {last_error or '未知错误'}"}
+        if result.get("success"):
+            try:
+                result.update(self._fetch_points_summary(cookie))
+            except Exception as error:
+                logger.warning(f"[ptingsign] 获取积分汇总失败，将保留签到接口数据: {error}")
         return self._record_result(result)
 
     def _record_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -458,7 +513,10 @@ class ptingsign(_PluginBase):
             status = f"签到失败: {result.get('message') or '未知错误'}"
 
         record = {"date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "status": status}
-        for key in ("sign_date", "reward", "points", "current_streak", "max_streak"):
+        for key in (
+            "sign_date", "reward", "today_points", "points_balance",
+            "current_streak", "max_streak",
+        ):
             if result.get(key) is not None:
                 record[key] = result[key]
         self._save_sign_history(record)
@@ -474,8 +532,11 @@ class ptingsign(_PluginBase):
         ]
         if record.get("reward") is not None and not result.get("already_signed"):
             lines.append(f"奖励：{record['reward']} 积分")
-        if record.get("points") is not None:
-            lines.append(f"当前积分：{record['points']}")
+        if record.get("today_points") is not None:
+            lines.append(f"今日积分：{self._format_signed_number(record['today_points'])}")
+        points_balance = record.get("points_balance", record.get("points"))
+        if points_balance is not None:
+            lines.append(f"积分余额：{points_balance}")
         if record.get("current_streak") is not None:
             lines.append(f"连续签到：{record['current_streak']} 天")
         self.post_message(
@@ -483,6 +544,16 @@ class ptingsign(_PluginBase):
             title="【蜂巢签到成功】" if ok else "【蜂巢签到失败】",
             text="\n".join(lines),
         )
+
+    @staticmethod
+    def _format_signed_number(value: Any) -> str:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if number.is_integer():
+            return f"{int(number):+d}" if number else "0"
+        return f"{number:+g}" if number else "0"
 
     def _save_sign_history(self, record: Dict[str, Any]):
         try:
@@ -576,8 +647,11 @@ class ptingsign(_PluginBase):
             detail = []
             if item.get("reward") is not None:
                 detail.append(f"奖励 {item['reward']}")
-            if item.get("points") is not None:
-                detail.append(f"积分 {item['points']}")
+            if item.get("today_points") is not None:
+                detail.append(f"今日积分 {self._format_signed_number(item['today_points'])}")
+            points_balance = item.get("points_balance", item.get("points"))
+            if points_balance is not None:
+                detail.append(f"积分余额 {points_balance}")
             if item.get("current_streak") is not None:
                 detail.append(f"连续 {item['current_streak']} 天")
             rows.append({

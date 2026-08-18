@@ -72,6 +72,7 @@ class PtingSignTests(unittest.TestCase):
         self.assertTrue(result["signed"])
         self.assertFalse(result["already_signed"])
         self.assertEqual(result["reward"], 2)
+        self.assertEqual(result["points_balance"], 5)
         self.assertEqual(result["current_streak"], 3)
 
     def test_parses_already_checked_in_as_success(self):
@@ -83,6 +84,40 @@ class PtingSignTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertFalse(result["signed"])
         self.assertTrue(result["already_signed"])
+        self.assertEqual(result["points_balance"], 5)
+
+    def test_parses_points_summary(self):
+        html = r'''<script>self.__next_f.push([1,"当前余额...{\"value\":7} 今日变动：...{\"value\":4}"])</script>'''
+
+        summary = MODULE.ptingsign._parse_points_summary_html(html)
+
+        self.assertEqual(summary, {"points_balance": 7, "today_points": 4})
+
+    def test_formats_signed_today_points(self):
+        self.assertEqual(MODULE.ptingsign._format_signed_number(4), "+4")
+        self.assertEqual(MODULE.ptingsign._format_signed_number(-2), "-2")
+        self.assertEqual(MODULE.ptingsign._format_signed_number(0), "0")
+
+    def test_notification_and_history_show_today_points_and_balance(self):
+        plugin = MODULE.ptingsign()
+        messages = []
+        plugin.post_message = lambda **kwargs: messages.append(kwargs)
+        record = {
+            "date": "2026-08-18 12:00:00",
+            "status": "今日已签到",
+            "today_points": 4,
+            "points_balance": 7,
+            "current_streak": 4,
+        }
+
+        plugin._send_notification(record, {"success": True, "already_signed": True})
+        self.assertIn("今日积分：+4", messages[0]["text"])
+        self.assertIn("积分余额：7", messages[0]["text"])
+
+        plugin.get_data = lambda _key: [record]
+        page_text = str(plugin.get_page())
+        self.assertIn("今日积分 +4", page_text)
+        self.assertIn("积分余额 7", page_text)
 
     def test_reports_expired_login(self):
         result = MODULE.ptingsign._parse_check_in_response(
