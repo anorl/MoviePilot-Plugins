@@ -1,17 +1,4 @@
 {
-  "ptingsign": {
-    "name": "蜂巢签到",
-    "description": "自动完成蜂巢每日签到，支持 CookieCloud",
-    "labels": "站点",
-    "version": "0.1.1",
-    "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/ptingsign.png",
-    "author": "anorl",
-    "level": 2,
-    "history": {
-      "v0.1.1": "修正签到接口 points 字段为积分余额，并新增今日积分与积分余额在通知和历史记录中的展示。",
-      "v0.1.0": "初始版本：按蜂巢当前签到接口实现，支持 CookieCloud、已签到识别、通知、重试与历史记录。"
-    }
-  },
   "deepfloodsign": {
     "name": "DeepFlood论坛签到",
     "description": "自动完成DeepFlood论坛每日签到，支持CookieCloud",
@@ -36,7 +23,8 @@
       "v0.1.8": "增强签到结果展示：自动提取奖励并在历史页展示。",
       "v0.1.7": "修复 V2 抽象方法缺失：补齐 get_page/get_api/get_command。",
       "v0.1.0": "初始版本：支持 URL/Cookie/API 路径与方法配置、定时服务、历史记录与多请求后备。"
-    }
+    },
+    "v3": false
   },
   "nodeseeksigncc": {
     "name": "NodeSeek论坛签到",
@@ -50,6 +38,7 @@
       "v0.1.2": "调整显示名称与说明文案，保留独立插件标识避免与现有插件冲突。",
       "v0.1.1": "改为独立唯一插件标识，避免与现有 NodeSeek 插件冲突。",
       "v0.1.0": "初始版本：基于现有 NodeSeek/DeepFlood 签到逻辑融合实现，支持 CookieCloud、通知、重试与历史记录。"
-    }
+    },
+    "v3": false
   }
 }

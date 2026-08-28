@@ -3,12 +3,12 @@
     "name": "DeepFlood论坛签到",
     "description": "自动完成DeepFlood论坛每日签到，支持CookieCloud",
     "labels": "站点",
-    "version": "0.2.10",
+    "version": "1.0.0",
     "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/deepfloodsign.ico",
     "author": "anorl",
     "level": 2,
-    "v2": true,
     "history": {
+      "v1.0.0": "适配 MoviePilot V3：使用稳定 SDK 导入及 V3 依赖清单。",
       "v0.2.10": "更新 DeepFlood 插件图标为仓库内置 ICO 文件。",
       "v0.2.9": "将 DeepFlood 图标切回仓库内置文件，避免站点外链图标加载失败。",
       "v0.2.8": "修复 package 清单格式并更新 DeepFlood 插件图标。",
@@ -25,22 +25,22 @@
       "v0.1.7": "修复 V2 抽象方法缺失：补齐 get_page/get_api/get_command。",
       "v0.1.0": "初始版本：支持 URL/Cookie/API 路径与方法配置、定时服务、历史记录与多请求后备。"
     },
-    "v3": false
+    "system_version": ">=3.0.0"
   },
   "nodeseeksigncc": {
     "name": "NodeSeek论坛签到",
     "description": "自动完成NodeSeek论坛每日签到，支持CookieCloud",
     "labels": "站点",
-    "version": "0.1.2",
+    "version": "1.0.0",
     "icon": "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/nodeseeksign.png",
     "author": "anorl",
     "level": 2,
-    "v2": true,
     "history": {
+      "v1.0.0": "适配 MoviePilot V3：使用稳定 SDK 导入及 V3 依赖清单。",
       "v0.1.2": "调整显示名称与说明文案，保留独立插件标识避免与现有插件冲突。",
       "v0.1.1": "改为独立唯一插件标识，避免与现有 NodeSeek 插件冲突。",
       "v0.1.0": "初始版本：基于现有 NodeSeek/DeepFlood 签到逻辑融合实现，支持 CookieCloud、通知、重试与历史记录。"
     },
-    "v3": false
+    "system_version": ">=3.0.0"
   }
 }

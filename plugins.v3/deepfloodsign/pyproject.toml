@@ -1,0 +1,9 @@
+[project]
+name = "moviepilot-plugin-deepfloodsign"
+dynamic = ["version"]
+requires-python = ">=3.14"
+dependencies = [
+    "curl_cffi>=0.15.0,<0.17.0",
+    "cloudscraper>=1.2.71,<2.0.0",
+    "brotli>=1.0.9",
+]
