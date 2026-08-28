@@ -1023,7 +1023,7 @@ class deepfloodsign(_PluginBase):
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """返回插件配置表单（Vuetify JSON）。
 
-        说明：MoviePilot v2 某些情况下若表单渲染异常，会表现为"此插件没有可配置项"。
+        说明：MoviePilot 某些情况下若表单渲染异常，会表现为"此插件没有可配置项"。
         这里显式记录日志，并在异常时返回一个错误提示表单，方便定位问题。
         """
         try:

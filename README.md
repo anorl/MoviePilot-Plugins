@@ -1,11 +1,10 @@
 ﻿# MoviePilot-Plugins
 
-这是一个同时支持 MoviePilot V2 和 V3 的第三方插件库。
+这是一个 MoviePilot V3 第三方插件库。
 开发说明：https://github.com/jxxghp/MoviePilot-Plugins/blob/main/README.md
 
-V2 使用 `plugins.v2/` 与 `package.v2.json`；V3 使用独立的
-`plugins.v3/` 与 `package.v3.json`。V3 版本采用 MoviePilot 稳定 SDK，原 V2
-实现继续保留，两个版本可以从同一个仓库地址安装。
+插件使用 `plugins.v3/` 与 `package.v3.json`，并通过 MoviePilot 稳定 SDK
+接入 V3。本仓库不再提供 MoviePilot V2 版本。
 
 ## 插件列表
 

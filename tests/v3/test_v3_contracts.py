@@ -66,11 +66,10 @@ class V3ContractTests(unittest.TestCase):
             self.assertGreater(len(project["dependencies"]), 0)
             self.assertFalse((plugin_dir / "requirements.txt").exists())
 
-    def test_legacy_indexes_disable_v3_fallback(self):
-        for package_name in ("package.json", "package.v2.json"):
-            package = json.loads((ROOT / package_name).read_text(encoding="utf-8"))
-            for plugin_id in PLUGIN_IDS:
-                self.assertIs(package[plugin_id]["v3"], False)
+    def test_repository_is_v3_only(self):
+        self.assertFalse((ROOT / "plugins.v2").exists())
+        self.assertFalse((ROOT / "package.json").exists())
+        self.assertFalse((ROOT / "package.v2.json").exists())
 
 
 if __name__ == "__main__":
