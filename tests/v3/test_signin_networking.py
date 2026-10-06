@@ -124,7 +124,7 @@ class SigninNetworkingTests(unittest.TestCase):
                 values = {item["name"]: item["value"] for item in items}
                 self.assertEqual(values, {"auth": "api"})
 
-    def test_session_cookie_is_not_injected(self):
+    def test_authenticated_session_cookie_is_injected_after_warmup(self):
         for plugin_id in PLUGIN_IDS:
             with self.subTest(plugin=plugin_id):
                 cls, _ = _load_test_class(plugin_id)
@@ -132,9 +132,9 @@ class SigninNetworkingTests(unittest.TestCase):
                 jar = _CookieJar()
                 plugin._http_session = types.SimpleNamespace(cookies=jar)
                 plugin._resolve_cookiecloud_domain = lambda: "www.example.com"
-                plugin._attach_http_cookies("auth=ok; session=blocked; cf_clearance=clear")
+                plugin._attach_http_cookies("auth=ok; session=authenticated; cf_clearance=clear")
                 names = [item[0] for item in jar.items]
-                self.assertEqual(names, ["auth", "cf_clearance"])
+                self.assertEqual(names, ["auth", "session", "cf_clearance"])
 
     def test_request_implementation_uses_aligned_curl_profile(self):
         for plugin_id in PLUGIN_IDS:
