@@ -27,11 +27,13 @@
 - `cookie`：浏览器登录态 Cookie（仅手工模式使用）
 - `member_id`：用户 ID（可选，用于获取用户名/等级/鸡腿）
 - `cron`：定时表达式（默认 `0 9 * * *`）
+- `use_proxy`：是否使用 MoviePilot 系统代理（默认关闭）
 
 说明：
 
 - 若使用 CookieCloud，请确保浏览器扩展已把目标站点域名同步到 CookieCloud 服务端。
 - 插件支持 MoviePilot 本地 CookieCloud 和远端 CookieCloud 两种模式。
+- Cloudflare Cookie 可能与出口 IP 绑定；浏览器直连获取 Cookie 时，签到也应优先直连。
 
 ## nodeseeksigncc（NodeSeek）
 
@@ -43,11 +45,13 @@
 - `cookie`：浏览器登录态 Cookie（仅手工模式使用）
 - `member_id`：用户 ID（可选，用于获取用户名/等级/鸡腿）
 - `cron`：定时表达式（默认 `0 9 * * *`）
+- `use_proxy`：是否使用 MoviePilot 系统代理（默认关闭）
 
 说明：
 
 - 为避免与其他仓库中的同名 NodeSeek 插件冲突，本仓库内部插件标识使用 `nodeseeksigncc`。
 - 若使用 CookieCloud，请确保浏览器扩展已把 `nodeseek` 相关域名同步到 CookieCloud 服务端。
+- Cloudflare Cookie 可能与出口 IP 绑定；浏览器直连获取 Cookie 时，签到也应优先直连。
 
 ## 免责声明
 
