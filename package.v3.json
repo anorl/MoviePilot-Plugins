@@ -3,11 +3,12 @@
     "name": "网易云音乐签到",
     "description": "网易云音乐每日签到，支持手工Cookie、CookieCloud及MP消息通知",
     "labels": "站点",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/NetEaseMusic.png",
     "author": "anorl",
     "level": 2,
     "history": {
+      "v1.0.1": "简化发送通知标签，增加配置输入框和下拉框之间的间距。",
       "v1.0.0": "支持移动端和网页端每日签到、手工Cookie或CookieCloud、历史记录及MP通知渠道（含Telegram）。"
     },
     "system_version": ">=3.0.0"

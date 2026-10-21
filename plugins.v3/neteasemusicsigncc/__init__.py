@@ -27,7 +27,7 @@ class neteasemusicsigncc(_PluginBase):
     plugin_name = "网易云音乐签到"
     plugin_desc = "网易云音乐每日签到，支持手工Cookie、CookieCloud及MP消息通知"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/NetEaseMusic.png"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "neteasemusicsigncc_"
@@ -222,20 +222,20 @@ class neteasemusicsigncc(_PluginBase):
             self._lock.release()
 
     def get_form(self):
-        switches = [("enabled", "启用插件"), ("notify", "发送通知（含TG）"),
+        switches = [("enabled", "启用插件"), ("notify", "发送通知"),
                     ("onlyonce", "立即运行一次"), ("use_proxy", "使用MoviePilot系统代理")]
         return [{"component": "VForm", "content": [
-            {"component": "VRow", "content": [
+            {"component": "VRow", "props": {"class": "mb-2"}, "content": [
                 {"component": "VCol", "props": {"cols": 12, "md": 3}, "content": [
                     {"component": "VSwitch", "props": {"model": key, "label": label}}
                 ]} for key, label in switches]},
-            {"component": "VTextField", "props": {"model": "cron", "label": "定时任务(cron)", "placeholder": "0 9 * * *"}},
-            {"component": "VSelect", "props": {"model": "sign_type", "label": "签到类型", "items": [
+            {"component": "VTextField", "props": {"model": "cron", "label": "定时任务(cron)", "class": "mb-4", "placeholder": "0 9 * * *"}},
+            {"component": "VSelect", "props": {"model": "sign_type", "label": "签到类型", "class": "mb-4", "items": [
                 {"title": "移动端和网页端", "value": "both"}, {"title": "移动端", "value": "0"},
                 {"title": "网页端", "value": "1"}]}},
-            {"component": "VSelect", "props": {"model": "cookie_source", "label": "Cookie来源", "items": [
+            {"component": "VSelect", "props": {"model": "cookie_source", "label": "Cookie来源", "class": "mb-4", "items": [
                 {"title": "手工填写", "value": "manual"}, {"title": "MoviePilot CookieCloud", "value": "cookiecloud"}]}},
-            {"component": "VTextField", "props": {"model": "cookie", "label": "网易云音乐Cookie", "type": "password",
+            {"component": "VTextField", "props": {"model": "cookie", "label": "网易云音乐Cookie", "type": "password", "class": "mb-4",
                 "show": "{{ cookie_source === 'manual' }}", "hint": "粘贴music.163.com登录后的完整Cookie，需包含MUSIC_U。", "persistent-hint": True}},
             {"component": "VAlert", "props": {"type": "info", "variant": "tonal",
                 "text": "支持手工Cookie或MoviePilot本地/远端CookieCloud。默认每天9点签到，保存最近100条历史。通知默认开启；TG请在MoviePilot配置Telegram渠道并允许接收站点消息。"}},
