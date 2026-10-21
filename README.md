@@ -11,6 +11,7 @@
 - `deepfloodsign`：DeepFlood 论坛每日签到
 - `nodeseeksigncc`：NodeSeek 论坛每日签到
 - `fengsigncc`：威锋网每日签到（手工 Cookie / CookieCloud）
+- `neteasemusicsigncc`：网易云音乐每日签到（手工 Cookie / CookieCloud、MP 通知）
 
 ## 安装
 
@@ -77,6 +78,24 @@
 - 不记录 Cookie、Token、CookieCloud 密码或带 KEY 的服务 URL。
 
 协议依据：威锋官网当前加载的网页脚本 `/_nuxt/6a68991.js`（2026-10-21 核对），使用 `GET /v1/user/experience`、`POST /v1/attendance/userSignIn` 及 `X-Access-Token` / `X-Request-Id` 请求头。匿名接口检查返回 `1001 / 先登录`；本地测试不代表真实账户签到成功，安装后应查看一次实际运行结果。
+
+## neteasemusicsigncc（网易云音乐）
+
+适用于 MoviePilot V3，插件和市场使用 `icons/NetEaseMusic.png`（230×230，保留原图透明背景）。支持移动端、网页端或两端每日签到，默认每天 9 点执行两端签到，时区沿用 MP 配置。
+
+1. 浏览器登录 `https://music.163.com`。
+2. 选择 Cookie 来源：手工粘贴完整 Cookie（必须包含 `MUSIC_U`，建议连同 `__csrf` 等字段一起复制）；或使用 MP 已配置的本地/远端 CookieCloud，同步 `music.163.com` 登录态。
+3. 默认开启通知，通过 MP 的 `SiteMessage`（站点消息）渠道发送成功、已签到、部分完成或失败结果。接收 TG 消息需要在 MP 中配置 Telegram，并允许该渠道接收站点消息，无需在插件重复填写 Bot Token。
+4. 开启「立即运行一次」测试，查看插件详情页的历史及 TG 通知，再启用定时任务。
+
+- 支持 `sign_type`：`both`（默认，两端）、`0`（移动端）、`1`（网页端）；两端结果独立判断，一端失败不覆盖另一端的结果。
+- `cookie_source` 默认 `cookiecloud`，可切换为 `manual`；手工输入框掩码显示，不会自动回退到另一来源的账号。
+- 详情页保留最近 100 次运行，展示时间、总结果、各端结果和接口返回的本次点数。保存历史或发送通知失败不会覆盖签到结果。
+- 使用内置 WEAPI 加密直连网易云，不依赖额外搭建音乐 API 服务。签到请求不自动重试，超时或断线会明确标记“结果未确认”，下次运行仍以服务端响应判断。
+- CookieCloud 按实际 Cookie 域名、有效期、路径筛选并消除同名冲突；不将 Cookie、CSRF、加密请求或服务器原始响应写入历史或日志。
+- `use_proxy` 默认关闭，可按需使用 MP 系统代理。
+
+协议实现依据：[每日签到与 Cookie/CSRF 请求流程](https://github.com/chen310/NeteaseCloudMusicTasks/blob/main/api.py)、[WEAPI 参数说明实现](https://github.com/chen310/NeteaseCloudMusicTasks/blob/main/encrypt.py)、[两端返回码处理参考](https://github.com/jrh520/wyy-action/blob/master/checkin.py)。本插件仅完成每日签到；真实账户签到和 TG 送达需安装到 MP 后验证。
 
 ## 免责声明
 
