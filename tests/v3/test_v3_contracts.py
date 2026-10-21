@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[2]
-PLUGIN_IDS = ("deepfloodsign", "nodeseeksigncc")
+PLUGIN_IDS = ("deepfloodsign", "nodeseeksigncc", "fengsigncc")
 
 
 class V3ContractTests(unittest.TestCase):
@@ -22,9 +22,10 @@ class V3ContractTests(unittest.TestCase):
         self.assertEqual(set(self.package), set(PLUGIN_IDS))
         for plugin_id in PLUGIN_IDS:
             metadata = self.package[plugin_id]
-            self.assertEqual(metadata["version"], "1.0.2")
+            expected_version = "1.0.0" if plugin_id == "fengsigncc" else "1.0.2"
+            self.assertEqual(metadata["version"], expected_version)
             self.assertEqual(metadata["system_version"], ">=3.0.0")
-            self.assertEqual(next(iter(metadata["history"])), "v1.0.2")
+            self.assertEqual(next(iter(metadata["history"])), f"v{expected_version}")
 
     def test_source_versions_match_market(self):
         for plugin_id in PLUGIN_IDS:
