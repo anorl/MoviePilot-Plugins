@@ -1,21 +1,4 @@
 {
-  "enshansigncc": {
-    "name": "恩山无线论坛签到",
-    "description": "恩山无线论坛每日签到，支持手工Cookie、CookieCloud及消息通知",
-    "labels": "站点",
-    "version": "1.0.4",
-    "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/enshansigncc.ico",
-    "author": "anorl",
-    "level": 2,
-    "history": {
-      "v1.0.4": "等待滑块实际就绪再尝试操作，补充验证资源加载诊断和最近失败截图，在插件数据页显示，避免控件未加载时过早结束。",
-      "v1.0.3": "控制滑块分段拖动耗时，增加MP有界面浏览器选项及阿里云验证结果码诊断，修正人工验证与Cookie同步提示。",
-      "v1.0.2": "补充滑块验证后的安全状态诊断，避免已登录页面残留防护脚本造成误判，验证未通过时保留人工处理提示。",
-      "v1.0.1": "适配实测阿里云直线滑块，按实时控件位置尝试一次并确认验证后页面，保留未知题型的人工处理提示。",
-      "v1.0.0": "首次发布：支持erling_qd签到、手工Cookie或CookieCloud、MP浏览器验证兜底、历史记录及带图标的消息通知。"
-    },
-    "system_version": ">=3.0.0"
-  },
   "tiebasigncc": {
     "name": "百度贴吧签到",
     "description": "自动签到关注的百度贴吧，支持手工Cookie、CookieCloud及消息通知",

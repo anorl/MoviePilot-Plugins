@@ -13,7 +13,6 @@
 - `fengsigncc`：威锋网每日签到（手工 Cookie / CookieCloud）
 - `neteasemusicsigncc`：网易云音乐每日签到（手工 Cookie / CookieCloud、MP 通知）
 - `tiebasigncc`：百度贴吧逐吧签到（手工 Cookie / CookieCloud、历史详情和 MP 通知）
-- `enshansigncc`：恩山无线论坛签到（手工 Cookie / CookieCloud、浏览器验证兜底、历史和 MP 通知）
 
 ## 安装
 
@@ -120,31 +119,6 @@
 - `use_proxy` 默认关闭，可选择 MP 系统代理。登录验证、关注列表和签到统一使用实测可访问的 `https://c.tieba.baidu.com`。所有贴吧接口均通过 HTTPS 请求；最多处理 3 次贴吧域名之间的同名 API 规范地址跳转，并保持原请求方法及表单，不跳转到登录页、验证页、HTTP 或其他网站。错误提示会标明请求阶段，不输出重定向URL中的凭据。
 
 接口参考：[贴吧客户端列表与签到](https://github.com/starudream/sign-task/blob/master/pkg/tieba/api/forum.go)、[请求签名](https://github.com/starudream/sign-task/blob/master/pkg/tieba/api/sign.go)、[关注列表分页及返回码格式](https://github.com/Alcatraz-Zhang/TiebaSignIn/blob/feat/keepalive-liskin/tieba_client.py)。本地测试不代表真实账号签到成功，安装后应查看一次实际运行结果和消息送达。
-
-## enshansigncc（恩山无线论坛）
-
-适用于 MoviePilot V3，使用恩山当前 `erling_qd` 签到接口，图标为站点原始 `icons/enshansigncc.ico`。
-
-1. 浏览器登录 `https://www.right.com.cn/forum/`。
-2. 选择 **手工填写** 并粘贴完整 Cookie（包含 `TWcq_2132_auth` 等登录字段，保留盐值和站点验证 Cookie）；或使用 MP 已配置的本地/远端 CookieCloud，同步 `right.com.cn` / `www.right.com.cn` Cookie。
-3. 默认每天 9 点执行，沿用 MP 时区。可先打开「立即运行一次」，确认历史与消息送达。
-4. 「发送通知」默认开启，使用 MP 的站点消息渠道；TG 需在 MP 中配置 Telegram 并允许接收站点消息。
-
-运行时先读取登录页面，确认退出登录链接及 `formhash`，再调用 `plugin.php?id=erling_qd:action&action=sign`。匿名页面即使存在 `formhash` 也不会提交签到。服务端明确返回成功或今日重复签到时才记为成功；只展示明确取得的用户名、连续/累计天数、恩山币和积分，不推算缺失奖励。历史保留最近 100 次运行，成功、已签到、失败和结果未确认都会记录。
-
-**站点真人验证处理：**「站点验证时使用MP浏览器」默认开启。提交前先读取签到页，若遇到阿里云验证页或HTTP 403，使用 `app.sdk.browser` 的浏览器上下文加载站点脚本并在同一浏览器会话中签到。需要 MP 本身的浏览器环境可用，不额外安装另一套浏览器。
-
-「自动尝试阿里云滑块」默认开启，适配恩山已实测的“按住滑块，拖到最右边”控件：读取当前控件位置，按下、拖动、释放，再等待页面离开验证页。每次运行最多操作一次，滑块移动到终点或出现“验证中”均不直接视为通过。
-
-该滑块已在本地 Chrome 中实测通过一次，随后进入已登录的恩山签到页；这不代表 MP 无头浏览器或所有网络出口都能通过。当前没有适配图片点选、拼图或文字识别验证码，也没有接入打码服务。未知题型或验证仍失败时停止并通知，不误报 Cookie 失效或签到成功。请在已登录浏览器完成人工验证后同步完整 Cookie；验证状态可能受出口或会话约束，不能保证复制后在另一环境中通用。
-
-- 浏览器兜底只在尚未提交签到前触发。签到 POST 超时或返回非JSON时，只做一次只读状态确认，不再次POST；无法确认则明确记为“结果未确认”。
-- 页面只认明确的签到按钮状态，脚本中的“签到成功”、排行榜文字和历史连续天数不会被当成今天已签到。
-- `use_proxy` 默认关闭；开启后HTTP和浏览器均使用MP系统代理。浏览器上下文运行后关闭，Cookie和验证状态不另存为本地文件。
-- CookieCloud按实际域名、路径、有效期筛选并消除同名冲突，过滤格式异常的非必要Cookie；不自动回退到其他来源的账号。
-- 通知、历史保存或账号积分查询失败，不覆盖已确认的签到结果。日志、历史及消息不记录Cookie、formhash、签名、站点原始响应或Request ID。
-
-接口参考：[恩山erling_qd请求与返回字段](https://github.com/Sitoi/dailycheckin/blob/main/dailycheckin/enshan/main.py)、[恩山页面状态与站点验证处理参考](https://github.com/HughRyu/SignMate/blob/main/src/drivers/right.js)、[MP浏览器SDK](https://github.com/jxxghp/MoviePilot/blob/v3/app/sdk/browser.py)。真实账号签到及真人验证处理效果需要在 MP 中实测。
 
 ## 免责声明
 
