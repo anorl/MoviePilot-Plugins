@@ -21,7 +21,7 @@ class tiebasigncc(_PluginBase):
     plugin_name = "百度贴吧签到"
     plugin_desc = "自动签到关注的百度贴吧，支持手工Cookie、CookieCloud及消息通知"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/tiebasigncc.ico"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "tiebasigncc_"
@@ -395,8 +395,15 @@ class tiebasigncc(_PluginBase):
                 content.append({"component": "VTable", "content": [
                     {"component": "thead", "content": [{"component": "tr", "content": [{"component": "th", "text": label} for label in ("贴吧", "结果")]}]},
                     {"component": "tbody", "content": rows}]})
+            title = f"{record.get('date', '')}　{record.get('status', '')}"
+            results = record.get("results", [])
+            if "total" in record or results:
+                title += f" 共{record.get('total', len(results))}个"
+            names = "、".join(item["name"] for item in results if item.get("name"))
+            if names:
+                title += f"  {names}"
             panels.append({"component": "VExpansionPanel", "content": [
-                {"component": "VExpansionPanelTitle", "text": f"{record.get('date', '')}　{record.get('status', '')}"},
+                {"component": "VExpansionPanelTitle", "props": {"class": "text-break"}, "text": title},
                 {"component": "VExpansionPanelText", "content": content}]})
         return [{"component": "VExpansionPanels", "content": panels}]
 

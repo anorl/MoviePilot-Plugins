@@ -3,7 +3,7 @@
     "name": "百度贴吧签到",
     "description": "自动签到关注的百度贴吧，支持手工Cookie、CookieCloud及消息通知",
     "labels": "站点",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/tiebasigncc.ico",
     "author": "anorl",
     "level": 2,
