@@ -22,7 +22,7 @@ class enshansigncc(_PluginBase):
     plugin_name = "恩山无线论坛签到"
     plugin_desc = "恩山无线论坛每日签到，支持手工Cookie、CookieCloud及消息通知"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/enshansigncc.ico"
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "enshansigncc_"
@@ -262,7 +262,9 @@ class enshansigncc(_PluginBase):
     def _launch_browser(self, cookies):
         """惰性调用MP稳定浏览器接口，不自行安装或启动另一套浏览器实现。"""
         from app.sdk.browser import launch_browser_context
-        options = {"headless": True, "locale": "zh-CN", "timezone": settings.TZ,
+        mode = "有界面" if self._config.get("browser_headed", False) else "无头"
+        logger.info(f"[enshansigncc] MP浏览器模式：{mode}")
+        options = {"headless": not self._config.get("browser_headed", False), "locale": "zh-CN", "timezone": settings.TZ,
                    "viewport": {"width": 1280, "height": 900},
                    "storage_state": {"cookies": [{"name": name, "value": value, "domain": "www.right.com.cn", "path": "/",
                                                     "secure": True, "httpOnly": False, "sameSite": "Lax"}
@@ -301,7 +303,13 @@ class enshansigncc(_PluginBase):
             page.mouse.down()
             pressed = True
             page.wait_for_timeout(150)
-            page.mouse.move(end_x, center_y, steps=32)
+            # steps仅表示事件数量，不保证耗时。分段等待，让控件有时间处理移动。
+            for step in range(1, 33):
+                progress = step / 32
+                fraction = progress * progress * (3 - 2 * progress)
+                page.mouse.move(start_x + (end_x - start_x) * fraction, center_y)
+                page.wait_for_timeout(35)
+            page.wait_for_timeout(120)
             page.mouse.up()
             pressed = False
             return True
@@ -351,6 +359,36 @@ class enshansigncc(_PluginBase):
             return "页面出现尚未适配的图形验证"
         return "页面仍有防护标记，未识别到明确验证结果"
 
+    _verify_codes = {
+        "T001": "客户端验证通过", "T002": "触发限流容灾放行", "T005": "测试模式放行", "T006": "白名单放行",
+        "F001": "风险策略拒绝", "F004": "测试模式拒绝", "F008": "验证数据重复提交",
+        "F009": "检测到虚拟设备环境", "F010": "IP访问频率受限", "F011": "设备访问频率受限",
+        "F014": "初始化记录缺失或过期", "F015": "验证交互未通过", "F016": "URL校验未通过",
+        "F017": "协议或参数异常", "F022": "加密模式校验失败", "F024": "检测到模拟点击或滑动",
+        "F025": "智能风险检测未通过",
+    }
+
+    def _watch_verification(self, page, state):
+        """被动读取官方验证响应；不打印URL、请求体、令牌或服务端原文。"""
+        def on_response(response):
+            try:
+                host = urlsplit(response.url).hostname or ""
+                if host not in ("captcha.cn-shanghai.aliyuncs.com", "captcha.cn-singapore.aliyuncs.com"):
+                    return
+                payload = response.json()
+                result = payload.get("Result") if isinstance(payload, dict) else None
+                code = result.get("VerifyCode") if isinstance(result, dict) else None
+                if isinstance(code, str) and code in self._verify_codes:
+                    state["verify_code"] = code
+                    logger.info(f"[enshansigncc] 阿里云验证结果：{code}（{self._verify_codes[code]}）")
+            except Exception:
+                # 响应不是JSON或导航已结束时不影响页面验证流程。
+                pass
+        try:
+            page.on("response", on_response)
+        except Exception:
+            logger.info("[enshansigncc] 当前MP浏览器不支持验证响应监听，继续使用页面状态判断")
+
     def _browser_load(self, page, path, challenge_state=None):
         """先执行站点脚本，再至多尝试一次已适配滑块，并检查真实页面状态。"""
         if challenge_state is None:
@@ -390,8 +428,11 @@ class enshansigncc(_PluginBase):
             raise ValueError("浏览器未停留在恩山论坛，请检查登录或站点验证状态")
         if self._browser_is_verification(html):
             detail = self._verification_detail(html)
+            code = challenge_state.get("verify_code")
+            if code in self._verify_codes:
+                detail += f"；{code}（{self._verify_codes[code]}）"
             logger.info(f"[enshansigncc] 验证页面诊断：{detail}")
-            raise ValueError(f"仍需人工完成恩山真人验证：{detail}；请在已登录浏览器完成验证后重新同步Cookie；当前未判定Cookie失效")
+            raise ValueError(f"仍需人工完成恩山真人验证：{detail}；可尝试MP有界面浏览器；人工验证应尽量使用与MP相同的网络出口，同步Cookie不保证解除验证；当前未判定Cookie失效")
         if response is not None and response.status != 200:
             # 初始403验证页可能已跳转到正常登录页，不能再用旧响应覆盖当前状态。
             if response.status != 403 or not challenge_state["slider_attempted"]:
@@ -407,6 +448,7 @@ class enshansigncc(_PluginBase):
         try:
             context = self._launch_browser(cookies)
             page = context.new_page()
+            self._watch_verification(page, challenge_state)
             html = self._browser_load(page, self._sign_page, challenge_state)
             formhash, username = self._parse_login_page(html)
             already, stats = self._parse_sign_page(html)
@@ -466,7 +508,7 @@ class enshansigncc(_PluginBase):
                     "status": ("浏览器签到结果未确认：" if submitted else "") + message}
         except Exception:
             return {"success": False, "unknown": submitted,
-                    "status": "浏览器签到结果未确认，本次不重复提交" if submitted else "无法完成浏览器验证，请检查MP浏览器环境或手工完成验证后同步Cookie"}
+                    "status": "浏览器签到结果未确认，本次不重复提交" if submitted else "无法完成浏览器验证，请检查MP浏览器环境；有界面模式需MP显示环境支持"}
         finally:
             if context is not None:
                 try:
@@ -548,15 +590,16 @@ class enshansigncc(_PluginBase):
                     {"component": "VSwitch", "props": {"model": key, "label": label}}]} for key, label in switches]},
             {"component": "VTextField", "props": {"model": "cron", "label": "定时任务(cron)", "class": "mb-4", "placeholder": "0 9 * * *"}},
             {"component": "VSwitch", "props": {"model": "browser_fallback", "label": "站点验证时使用MP浏览器", "class": "mb-4"}},
+            {"component": "VSwitch", "props": {"model": "browser_headed", "label": "使用有界面浏览器（需要MP显示环境）", "class": "mb-4"}},
             {"component": "VSwitch", "props": {"model": "auto_slider", "label": "自动尝试阿里云滑块（每次运行一次）", "class": "mb-4"}},
             {"component": "VSelect", "props": {"model": "cookie_source", "label": "Cookie来源", "class": "mb-4", "items": [
                 {"title": "手工填写", "value": "manual"}, {"title": "MoviePilot CookieCloud", "value": "cookiecloud"}]}},
             {"component": "VTextField", "props": {"model": "cookie", "label": "恩山无线论坛Cookie", "type": "password", "class": "mb-4",
                 "show": "{{ cookie_source === 'manual' }}", "hint": "粘贴www.right.com.cn登录后的完整Cookie，包含TWcq_2132_auth等登录字段。", "persistent-hint": True}},
             {"component": "VAlert", "props": {"type": "info", "variant": "tonal",
-                "text": "支持手工Cookie或MP本地/远端CookieCloud。默认每天9点签到，保留100条历史，通知通过MP站点消息投递。验证页默认使用MP浏览器，并尝试一次已适配的阿里云直线滑块；其他图形题型或验证失败仍需人工完成后同步Cookie。不会重复提交签到。"}},
+                "text": "支持手工Cookie或MP本地/远端CookieCloud。默认每天9点签到，保留100条历史，通知通过MP站点消息投递。默认无头模式；验证失败可启用有界面模式，由MP管理显示资源，并非打开本机浏览器。每次仅尝试一次直线滑块，未知图形题型需人工处理。人工验证应尽量与MP使用同一网络出口，同步Cookie不保证解除验证。不会重复提交签到。"}},
         ]}], {"enabled": False, "notify": True, "onlyonce": False, "cron": "0 9 * * *",
-              "use_proxy": False, "cookie_source": "cookiecloud", "cookie": "", "browser_fallback": True, "auto_slider": True}
+              "use_proxy": False, "cookie_source": "cookiecloud", "cookie": "", "browser_fallback": True, "auto_slider": True, "browser_headed": False}
 
     def get_page(self):
         history = self.get_data("sign_history") or []
@@ -575,7 +618,7 @@ class enshansigncc(_PluginBase):
         self._config = {
             "enabled": False, "notify": True, "onlyonce": False,
             "cron": "0 9 * * *", "use_proxy": False,
-            "cookie_source": "cookiecloud", "cookie": "", "browser_fallback": True, "auto_slider": True,
+            "cookie_source": "cookiecloud", "cookie": "", "browser_fallback": True, "auto_slider": True, "browser_headed": False,
         }
         self._config.update(config or {})
         self._lock = getattr(self, "_lock", Lock())

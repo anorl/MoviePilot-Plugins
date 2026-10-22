@@ -74,7 +74,7 @@ class EnshanSignTests(unittest.TestCase):
         meta = json.loads((ROOT / "package.v3.json").read_text(encoding="utf-8"))["enshansigncc"]
         for key, attr in (("name", "plugin_name"), ("description", "plugin_desc"), ("icon", "plugin_icon"), ("version", "plugin_version")):
             self.assertEqual(meta[key], getattr(self.plugin, attr))
-        self.assertEqual(next(iter(meta["history"])), "v1.0.2")
+        self.assertEqual(next(iter(meta["history"])), "v1.0.3")
         self.assertTrue((ROOT / "icons/enshansigncc.ico").exists())
 
     def test_manual_cookie_preserves_encoding_and_never_reads_cloud(self):
@@ -275,6 +275,14 @@ class EnshanSignTests(unittest.TestCase):
         self.assertEqual(options["storage_state"]["cookies"][0]["domain"], "www.right.com.cn")
         self.assertTrue(options["headless"])
 
+    def test_headed_mode_uses_mp_managed_browser(self):
+        browser_module = types.ModuleType("app.sdk.browser")
+        browser_module.launch_browser_context = Mock()
+        self.plugin._config["browser_headed"] = True
+        with patch.dict(sys.modules, {"app": types.ModuleType("app"), "app.sdk": types.ModuleType("app.sdk"), "app.sdk.browser": browser_module}):
+            self.plugin._launch_browser({"TWcq_2132_auth": "private-auth"})
+        self.assertFalse(browser_module.launch_browser_context.call_args.kwargs["headless"])
+
     def test_browser_script_validation_can_finish_without_captcha_actions(self):
         context, page = self.browser()
         page.content.side_effect = [WAF, LOGIN, '<p>恩山币: 12 积分: 30</p>']
@@ -290,8 +298,11 @@ class EnshanSignTests(unittest.TestCase):
         page.query_selector.side_effect = [knob, track]
         self.assertTrue(self.plugin._try_aliyun_slider(page))
         self.assertEqual(page.mouse.move.call_args_list[0].args, (779, 528))
-        self.assertEqual(page.mouse.move.call_args_list[1].args, (1099, 528))
-        self.assertEqual(page.mouse.move.call_args_list[1].kwargs, {"steps": 32})
+        moves = page.mouse.move.call_args_list
+        self.assertEqual(len(moves), 33)
+        self.assertEqual(moves[-1].args, (1099, 528))
+        self.assertTrue(all(a.args[0] < b.args[0] for a, b in zip(moves, moves[1:])))
+        self.assertEqual(sum(call.args[0] for call in page.wait_for_timeout.call_args_list), 1390)
         page.mouse.down.assert_called_once()
         page.mouse.up.assert_called_once()
 
@@ -364,6 +375,37 @@ class EnshanSignTests(unittest.TestCase):
         self.assertIn("页面提示验证失败或需要重试", result["status"])
         self.assertNotIn("private-", result["status"])
         page.evaluate.assert_not_called()
+
+    def test_verification_response_only_records_known_codes_from_official_hosts(self):
+        page, state = Mock(), {}
+        self.plugin._watch_verification(page, state)
+        callback = page.on.call_args.args[1]
+        for host, payload in (
+            ("example.com", {"Result": {"VerifyCode": "F024"}}),
+            ("captcha.cn-shanghai.aliyuncs.com.evil.test", {"Result": {"VerifyCode": "F024"}}),
+            ("captcha.cn-shanghai.aliyuncs.com", {"Result": {"VerifyCode": "private-token"}}),
+            ("captcha.cn-shanghai.aliyuncs.com", {"Result": None}),
+        ):
+            item = Mock(url=f"https://{host}/?token=private-token")
+            item.json.return_value = payload
+            callback(item)
+            self.assertEqual(state, {})
+        item = Mock(url="https://captcha.cn-shanghai.aliyuncs.com/?token=private-token")
+        item.json.return_value = {"Result": {"VerifyCode": "F024", "CertifyId": "private-token"}}
+        callback(item)
+        self.assertEqual(state, {"verify_code": "F024"})
+
+    def test_known_verification_code_is_in_failure_status(self):
+        _, page = self.browser(WAF)
+        state = {"slider_attempted": True, "verify_code": "F024"}
+        with self.assertRaisesRegex(ValueError, "F024（检测到模拟点击或滑动）"):
+            self.plugin._browser_load(page, self.plugin._sign_page, state)
+        page.evaluate.assert_not_called()
+
+    def test_optional_response_listener_failure_does_not_abort(self):
+        page = Mock()
+        page.on.side_effect = AttributeError("private-error")
+        self.plugin._watch_verification(page, {})
 
     def test_slider_can_be_disabled(self):
         _, page = self.browser(WAF)
