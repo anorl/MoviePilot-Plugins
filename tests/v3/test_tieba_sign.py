@@ -71,12 +71,49 @@ class TiebaSignTests(unittest.TestCase):
 
     def test_invalid_or_missing_cookie_does_not_leak_or_fallback(self):
         self.plugin._load_cookiecloud = Mock(side_effect=AssertionError())
-        for raw in ("", "BDUSS_BFESS=private-bduss", "BDUSS=private-bduss\r\nbad", "BDUSS=ok; bad name=private-bduss"):
+        for raw in ("", "BDUSS_BFESS=private-bduss", "BDUSS=private-bduss\r\nbad"):
             self.plugin._config["cookie"] = raw
             with self.assertRaises(ValueError) as error:
                 self.plugin._get_cookies()
             self.assertNotIn("private-bduss", str(error.exception))
         self.plugin._load_cookiecloud.assert_not_called()
+
+    def test_cloud_ignores_invalid_auxiliary_cookies_without_leaking_credentials(self):
+        self.plugin._config["cookie_source"] = "cookiecloud"
+        self.plugin._load_cookiecloud = Mock(return_value={"baidu.com": [
+            cookie(), cookie("STOKEN", "valid-stoken"),
+            cookie("bad:name", "private-aux-value"),
+            cookie("bad-value", "private-aux-value\tinvalid"),
+            cookie("unicode-value", "中文统计数据"),
+            cookie("中文名称", "private-aux-value")]})
+        with patch.dict(namespace, logger=Mock()):
+            result = self.plugin._get_cookies()
+            calls = str(namespace["logger"].mock_calls)
+        self.assertEqual(result, {"BDUSS": "private-bduss", "STOKEN": "valid-stoken"})
+        for secret in ("private-bduss", "valid-stoken", "private-aux-value", "bad:name", "中文统计数据"):
+            self.assertNotIn(secret, calls)
+
+    def test_invalid_bduss_remains_fatal_even_with_valid_auxiliary_cookies(self):
+        self.plugin._config["cookie_source"] = "cookiecloud"
+        for value in ("private-bduss\tinvalid", "private-bduss\r\ninvalid", "private-bduss中文"):
+            self.plugin._load_cookiecloud = Mock(return_value={"baidu.com": [cookie(value=value), cookie("STOKEN", "valid")]})
+            with self.assertRaisesRegex(ValueError, "BDUSS登录Cookie") as error:
+                self.plugin._get_cookies()
+            self.assertNotIn("private-bduss", str(error.exception))
+
+    def test_manual_auxiliary_cookie_error_does_not_block_valid_bduss(self):
+        self.plugin._config["cookie"] = "BDUSS=private-bduss; bad:name=private-aux-value; bad-value=private\tvalue"
+        self.assertEqual(self.plugin._get_cookies(), {"BDUSS": "private-bduss"})
+
+    def test_filtered_cloud_cookies_reach_tieba_request(self):
+        self.plugin._config["cookie_source"] = "cookiecloud"
+        self.plugin._load_cookiecloud = Mock(return_value={"baidu.com": [cookie(), cookie("bad:name", "bad")]})
+        self.prepare_run([])
+        result = self.plugin.sign()
+        self.assertTrue(result["success"])
+        session = self.plugin._get_tbs.call_args.args[0]
+        self.assertEqual(session.cookies.get("BDUSS"), "private-bduss")
+        self.assertNotIn("bad:name", session.cookies.get_dict())
 
     def test_cloud_filters_scope_expiry_and_duplicate_names(self):
         self.plugin._config["cookie_source"] = "cookiecloud"

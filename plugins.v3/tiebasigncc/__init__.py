@@ -20,7 +20,7 @@ class tiebasigncc(_PluginBase):
     plugin_name = "百度贴吧签到"
     plugin_desc = "自动签到关注的百度贴吧，支持手工Cookie、CookieCloud及消息通知"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/tiebasigncc.ico"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "tiebasigncc_"
@@ -50,10 +50,24 @@ class tiebasigncc(_PluginBase):
     def _validate_cookies(cookies):
         if not cookies.get("BDUSS"):
             raise ValueError("缺少贴吧BDUSS登录Cookie，请在tieba.baidu.com登录后更新Cookie")
+        valid = {}
+        invalid_names = invalid_values = 0
         for name, value in cookies.items():
-            if not re.fullmatch(r"[!#$%&'*+.^_`|~0-9a-zA-Z-]+", name) or any(ord(c) < 32 or ord(c) == 127 for c in value):
-                raise ValueError("Cookie格式无效，请重新复制浏览器Cookie")
-        return cookies
+            name_ok = bool(re.fullmatch(r"[!#$%&'*+.^_`|~0-9a-zA-Z-]+", name))
+            # requests使用HTTP头传输Cookie，控制字符和非ASCII值不能原样发送。
+            value_ok = value.isascii() and not any(ord(c) < 32 or ord(c) == 127 for c in value)
+            if name_ok and value_ok:
+                valid[name] = value
+                continue
+            if name == "BDUSS":
+                raise ValueError("BDUSS登录Cookie含控制字符或非ASCII字符，请重新登录贴吧并更新Cookie或同步CookieCloud")
+            invalid_names += not name_ok
+            invalid_values += not value_ok
+        if invalid_names or invalid_values:
+            # 名称也可能是被错误解析的凭据，不输出名称或值。
+            logger.warning(
+                f"[tiebasigncc] 已忽略格式异常的非必要Cookie：名称异常{invalid_names}项，值异常{invalid_values}项；继续使用有效登录Cookie")
+        return valid
 
     def _get_cookies(self):
         source = str(self._config.get("cookie_source") or "cookiecloud").strip().lower()

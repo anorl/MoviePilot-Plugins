@@ -3,11 +3,12 @@
     "name": "百度贴吧签到",
     "description": "自动签到关注的百度贴吧，支持手工Cookie、CookieCloud及消息通知",
     "labels": "站点",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/tiebasigncc.ico",
     "author": "anorl",
     "level": 2,
     "history": {
+      "v1.0.1": "过滤格式异常的非必要Cookie，避免CookieCloud中的无关条目阻断签到；单独校验BDUSS并提供脱敏诊断。",
       "v1.0.0": "支持关注贴吧分页获取、逐吧签到、手工Cookie或CookieCloud、历史详情和带图标的MP消息通知。"
     },
     "system_version": ">=3.0.0"
