@@ -116,7 +116,7 @@
 - 不自动重试签到提交；超时或断线标记“结果未确认”。遇到验证码或风控、HTTP异常或非JSON响应时停止后续提交，剩余贴吧标记为未提交；请在浏览器检查后再运行。
 - 关闭或重载插件会在当前请求返回后停止后续签到；并发触发时跳过重复任务。
 - 保存历史或发送消息失败不会覆盖已确认结果；日志、历史和通知不记录 Cookie、BDUSS、TBS、签名或服务器原始响应。
-- `use_proxy` 默认关闭，可选择 MP 系统代理。所有贴吧接口均通过 HTTPS 请求，不跟随重定向。
+- `use_proxy` 默认关闭，可选择 MP 系统代理。登录验证、关注列表和签到统一使用实测可访问的 `https://c.tieba.baidu.com`。所有贴吧接口均通过 HTTPS 请求；最多处理 3 次贴吧域名之间的同名 API 规范地址跳转，并保持原请求方法及表单，不跳转到登录页、验证页、HTTP 或其他网站。错误提示会标明请求阶段，不输出重定向URL中的凭据。
 
 接口参考：[贴吧客户端列表与签到](https://github.com/starudream/sign-task/blob/master/pkg/tieba/api/forum.go)、[请求签名](https://github.com/starudream/sign-task/blob/master/pkg/tieba/api/sign.go)、[关注列表分页及返回码格式](https://github.com/Alcatraz-Zhang/TiebaSignIn/blob/feat/keepalive-liskin/tieba_client.py)。本地测试不代表真实账号签到成功，安装后应查看一次实际运行结果和消息送达。
 

@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timedelta
 from hashlib import md5
 from threading import Event, Lock
+from urllib.parse import urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 import requests
@@ -20,14 +21,14 @@ class tiebasigncc(_PluginBase):
     plugin_name = "百度贴吧签到"
     plugin_desc = "自动签到关注的百度贴吧，支持手工Cookie、CookieCloud及消息通知"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/tiebasigncc.ico"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.0"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "tiebasigncc_"
     plugin_order = 1
     auth_level = 2
     _web_url = "https://tieba.baidu.com"
-    _client_url = "https://tiebac.baidu.com"
+    _client_url = "https://c.tieba.baidu.com"
 
     def init_plugin(self, config: dict = None):
         self.stop_service()
@@ -124,19 +125,49 @@ class tiebasigncc(_PluginBase):
 
     @staticmethod
     def _request_json(session, method, url, data=None):
-        response = session.request(method, url, data=data, timeout=25, allow_redirects=False)
+        stages = {"/dc/common/tbs": "登录验证", "/c/f/forum/like": "获取关注列表", "/c/c/forum/sign": "逐吧签到"}
+        original_path = urlsplit(url).path.rstrip("/")
+        stage = stages.get(original_path, "贴吧")
+        visited = {url}
+        for hop in range(4):
+            # 手动处理同名API的规范地址跳转，避免requests把301/302的POST变成GET。
+            response = session.request(method, url, data=data, timeout=25, allow_redirects=False)
+            if response.status_code not in (301, 302, 307, 308):
+                break
+            location = response.headers.get("Location", "")
+            try:
+                target = urljoin(url, location)
+                parts = urlsplit(target)
+                allowed = (
+                    bool(location) and original_path in stages
+                    and parts.scheme == "https"
+                    and parts.hostname in ("tieba.baidu.com", "c.tieba.baidu.com", "tiebac.baidu.com")
+                    and parts.port in (None, 443)
+                    and parts.username is None and parts.password is None
+                    and parts.path.rstrip("/") == original_path
+                    and not parts.query and not parts.fragment
+                )
+            except ValueError:
+                allowed = False
+            if not allowed:
+                raise ValueError(f"{stage}接口返回HTTP {response.status_code}，重定向目标不是受支持的HTTPS同名API，请在浏览器检查登录或验证状态")
+            if target in visited or hop == 3:
+                raise ValueError(f"{stage}接口重定向循环或超过3次，请稍后重试")
+            visited.add(target)
+            response.close()
+            url = target
         if response.status_code != 200:
-            raise ValueError(f"贴吧接口返回HTTP {response.status_code}")
+            raise ValueError(f"{stage}接口返回HTTP {response.status_code}")
         try:
             payload = response.json()
         except ValueError:
-            raise ValueError("贴吧接口返回非JSON内容，可能需要在浏览器完成验证") from None
+            raise ValueError(f"{stage}接口返回非JSON内容，可能需要在浏览器完成验证") from None
         if not isinstance(payload, dict):
-            raise ValueError("贴吧接口响应格式异常")
+            raise ValueError(f"{stage}接口响应格式异常")
         return payload
 
     def _get_tbs(self, session):
-        payload = self._request_json(session, "GET", self._web_url + "/dc/common/tbs")
+        payload = self._request_json(session, "GET", self._client_url + "/dc/common/tbs")
         if str(payload.get("is_login")) != "1":
             raise ValueError("贴吧登录态未通过验证，请重新登录并更新Cookie")
         tbs = payload.get("tbs")

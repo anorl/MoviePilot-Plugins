@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from hashlib import md5
 from pathlib import Path
 from threading import Event, Lock
+from urllib.parse import urljoin, urlsplit
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
@@ -182,6 +183,58 @@ class TiebaSignTests(unittest.TestCase):
             self.plugin._get_tbs(Mock())
         self.plugin._request_json.return_value = {"is_login": 1, "tbs": "private-tbs"}
         self.assertEqual(self.plugin._get_tbs(Mock()), "private-tbs")
+        self.assertEqual(self.plugin._request_json.call_args.args[2], "https://c.tieba.baidu.com/dc/common/tbs")
+
+    def test_api_redirect_preserves_post_and_sensitive_form(self):
+        for code in (301, 302, 307, 308):
+            with self.subTest(code=code):
+                session = Mock()
+                first = Mock(status_code=code, headers={"Location": "https://c.tieba.baidu.com/c/c/forum/sign/"})
+                second = Mock(status_code=200)
+                second.json.return_value = {"error_code": "0"}
+                session.request.side_effect = [first, second]
+                data = {"BDUSS": "private-bduss", "tbs": "private-tbs", "kw": "python", "sign": "private-sign"}
+                result = self.plugin._request_json(session, "POST", "https://tiebac.baidu.com/c/c/forum/sign", data)
+                self.assertEqual(result["error_code"], "0")
+                self.assertEqual(len(session.request.call_args_list), 2)
+                for call in session.request.call_args_list:
+                    self.assertEqual(call.args[0], "POST")
+                    self.assertEqual(call.kwargs["data"], data)
+                    self.assertFalse(call.kwargs["allow_redirects"])
+
+    def test_redirect_does_not_forward_credentials_to_unapproved_targets(self):
+        targets = ["https://passport.baidu.com/login?token=private-bduss", "http://c.tieba.baidu.com/dc/common/tbs",
+                   "https://c.tieba.baidu.com.evil.test/dc/common/tbs", "https://evil.test/dc/common/tbs",
+                   "https://c.tieba.baidu.com/login", "https://c.tieba.baidu.com/dc/common/tbs?token=private-tbs",
+                   "https://user:private-bduss@c.tieba.baidu.com/dc/common/tbs", "https://c.tieba.baidu.com:8443/dc/common/tbs", ""]
+        for target in targets:
+            with self.subTest(target=target):
+                session = Mock()
+                session.request.return_value = Mock(status_code=301, headers={"Location": target})
+                with self.assertRaisesRegex(ValueError, "登录验证接口返回HTTP 301") as error:
+                    self.plugin._request_json(session, "GET", "https://c.tieba.baidu.com/dc/common/tbs")
+                session.request.assert_called_once()
+                self.assertNotIn("private-bduss", str(error.exception))
+                self.assertNotIn("private-tbs", str(error.exception))
+
+    def test_relative_same_api_redirect_and_loop_limit(self):
+        session = Mock()
+        final = Mock(status_code=200)
+        final.json.return_value = {"is_login": 0}
+        session.request.side_effect = [Mock(status_code=301, headers={"Location": "/dc/common/tbs/"}), final]
+        self.assertEqual(self.plugin._request_json(session, "GET", "https://c.tieba.baidu.com/dc/common/tbs")["is_login"], 0)
+        session = Mock()
+        session.request.return_value = Mock(status_code=301, headers={"Location": "/dc/common/tbs"})
+        with self.assertRaisesRegex(ValueError, "重定向循环"):
+            self.plugin._request_json(session, "GET", "https://c.tieba.baidu.com/dc/common/tbs")
+        session.request.assert_called_once()
+        session = Mock()
+        session.request.side_effect = [Mock(status_code=301, headers={"Location": url}) for url in (
+            "https://tieba.baidu.com/dc/common/tbs", "https://tiebac.baidu.com/dc/common/tbs",
+            "https://c.tieba.baidu.com/dc/common/tbs/", "https://tieba.baidu.com/dc/common/tbs/")]
+        with self.assertRaisesRegex(ValueError, "超过3次"):
+            self.plugin._request_json(session, "GET", "https://c.tieba.baidu.com/dc/common/tbs")
+        self.assertEqual(session.request.call_count, 4)
 
     def test_paginated_grouped_and_list_formats_are_merged_and_deduped(self):
         self.plugin._request_json = Mock(side_effect=[
