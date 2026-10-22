@@ -3,10 +3,15 @@
     "name": "百度贴吧签到",
     "description": "自动签到关注的百度贴吧，支持手工Cookie、CookieCloud及消息通知",
     "labels": "站点",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/tiebasigncc.ico",
     "author": "anorl",
     "level": 2,
+    "history": {
+      "v1.0.2": "补齐插件市场版本历史，恢复更新记录展示。",
+      "v1.0.1": "签到历史折叠标题增加贴吧数量和名称列表，展开后的汇总及逐吧详情保持不变。",
+      "v1.0.0": "首次发布：支持关注贴吧分页获取、逐吧签到、手工Cookie或CookieCloud、历史详情和带图标的MP消息通知。"
+    },
     "system_version": ">=3.0.0"
   },
   "neteasemusicsigncc": {

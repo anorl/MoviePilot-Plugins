@@ -22,13 +22,10 @@ class V3ContractTests(unittest.TestCase):
         self.assertEqual(set(self.package), set(PLUGIN_IDS))
         for plugin_id in PLUGIN_IDS:
             metadata = self.package[plugin_id]
-            expected_version = {"fengsigncc": "1.0.1", "tiebasigncc": "1.0.1"}.get(plugin_id, "1.0.2")
+            expected_version = {"fengsigncc": "1.0.1"}.get(plugin_id, "1.0.2")
             self.assertEqual(metadata["version"], expected_version)
             self.assertEqual(metadata["system_version"], ">=3.0.0")
-            if plugin_id == "tiebasigncc":
-                self.assertNotIn("history", metadata)
-            else:
-                self.assertEqual(next(iter(metadata["history"])), f"v{expected_version}")
+            self.assertEqual(next(iter(metadata["history"])), f"v{expected_version}")
 
     def test_source_versions_match_market(self):
         for plugin_id in PLUGIN_IDS:

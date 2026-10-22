@@ -21,7 +21,7 @@ class tiebasigncc(_PluginBase):
     plugin_name = "百度贴吧签到"
     plugin_desc = "自动签到关注的百度贴吧，支持手工Cookie、CookieCloud及消息通知"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/tiebasigncc.ico"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "tiebasigncc_"
