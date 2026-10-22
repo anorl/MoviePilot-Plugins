@@ -1,5 +1,6 @@
 """恩山登录态、formhash、签到确认和浏览器人工验证分支测试。"""
 import ast
+import base64
 import json
 import re
 import sys
@@ -68,13 +69,14 @@ class EnshanSignTests(unittest.TestCase):
         page.content.side_effect = lambda: '<p>恩山币: 12.5 积分: 30</p>' if 'showcredit' in page.url else html
         page.evaluate.return_value = reply if reply is not None else {"status": 200, "data": {"success": True, "continuous_days": 9}}
         self.plugin._launch_browser = Mock(return_value=context)
+        self.plugin._slider_ready = Mock(return_value=True)
         return context, page
 
     def test_market_identity_and_history(self):
         meta = json.loads((ROOT / "package.v3.json").read_text(encoding="utf-8"))["enshansigncc"]
         for key, attr in (("name", "plugin_name"), ("description", "plugin_desc"), ("icon", "plugin_icon"), ("version", "plugin_version")):
             self.assertEqual(meta[key], getattr(self.plugin, attr))
-        self.assertEqual(next(iter(meta["history"])), "v1.0.3")
+        self.assertEqual(next(iter(meta["history"])), "v1.0.4")
         self.assertTrue((ROOT / "icons/enshansigncc.ico").exists())
 
     def test_manual_cookie_preserves_encoding_and_never_reads_cloud(self):
@@ -285,6 +287,7 @@ class EnshanSignTests(unittest.TestCase):
 
     def test_browser_script_validation_can_finish_without_captcha_actions(self):
         context, page = self.browser()
+        self.plugin._slider_ready.return_value = False
         page.content.side_effect = [WAF, LOGIN, '<p>恩山币: 12 积分: 30</p>']
         self.assertTrue(self.plugin._run_browser({"TWcq_2132_auth": "private-auth"})["success"])
         page.click.assert_not_called()
@@ -379,7 +382,7 @@ class EnshanSignTests(unittest.TestCase):
     def test_verification_response_only_records_known_codes_from_official_hosts(self):
         page, state = Mock(), {}
         self.plugin._watch_verification(page, state)
-        callback = page.on.call_args.args[1]
+        callback = next(call.args[1] for call in page.on.call_args_list if call.args[0] == "response")
         for host, payload in (
             ("example.com", {"Result": {"VerifyCode": "F024"}}),
             ("captcha.cn-shanghai.aliyuncs.com.evil.test", {"Result": {"VerifyCode": "F024"}}),
@@ -406,6 +409,69 @@ class EnshanSignTests(unittest.TestCase):
         page = Mock()
         page.on.side_effect = AttributeError("private-error")
         self.plugin._watch_verification(page, {})
+
+    def test_slider_waits_for_widget_loaded_after_six_seconds(self):
+        _, page = self.browser()
+        self.plugin._slider_ready.side_effect = lambda _: page.wait_for_timeout.call_count >= 9
+        page.content.side_effect = [WAF] * 9 + [SIGNED]
+        self.plugin._try_aliyun_slider = Mock(return_value=True)
+        self.assertEqual(self.plugin._browser_load(page, self.plugin._sign_page), SIGNED)
+        self.plugin._try_aliyun_slider.assert_called_once_with(page)
+        self.assertGreaterEqual(page.wait_for_timeout.call_count, 10)
+
+    def test_missing_widget_does_not_consume_slider_attempt(self):
+        _, page = self.browser(WAF)
+        self.plugin._slider_ready.return_value = False
+        self.plugin._try_aliyun_slider = Mock()
+        state = {"slider_attempted": False}
+        with self.assertRaisesRegex(ValueError, "等待20秒后仍未找到"):
+            self.plugin._browser_load(page, self.plugin._sign_page, state)
+        self.assertFalse(state["slider_attempted"])
+        self.plugin._try_aliyun_slider.assert_not_called()
+        page.evaluate.assert_not_called()
+
+    def test_widget_readiness_rejects_invisible_geometry(self):
+        page, handle, track = Mock(), Mock(), Mock()
+        page.query_selector.side_effect = [handle, track]
+        handle.bounding_box.return_value = None
+        track.bounding_box.return_value = {"width": 360, "height": 40}
+        self.assertFalse(self.plugin._slider_ready(page))
+
+    def test_resource_diagnostics_strip_credentials_path_and_query(self):
+        page, state = Mock(), {}
+        self.plugin._watch_verification(page, state)
+        events = {call.args[0]: call.args[1] for call in page.on.call_args_list}
+        request = Mock(url="https://private-user:private-password@captcha.cn-shanghai.aliyuncs.com/private-path?token=private-token",
+                       resource_type="script", failure="net::ERR_NAME_NOT_RESOLVED private-token")
+        events["requestfailed"](request)
+        events["pageerror"](RuntimeError("private-token"))
+        events["response"](Mock(url=request.url, status=403, request=request))
+        self.assertEqual(state["script_error_count"], 1)
+        self.assertEqual(state["resource_failures"], ["captcha.cn-shanghai.aliyuncs.com: ERR_NAME_NOT_RESOLVED",
+                                                       "captcha.cn-shanghai.aliyuncs.com: HTTP 403"])
+        self.assertNotIn("private-", str(state))
+
+    def test_failure_screenshot_and_diagnostic_are_visible_without_sign_history(self):
+        page = Mock()
+        page.screenshot.return_value = b"jpeg-test"
+        self.plugin._save_verification_diagnostic(page, "控件未加载", {"resource_failures": ["example.com: HTTP 403"]})
+        key, record = self.plugin.save_data.call_args.args
+        self.assertEqual(key, "verification_diagnostic")
+        self.assertEqual(base64.b64decode(record["image"].split(",", 1)[1]), b"jpeg-test")
+        self.plugin.get_data.side_effect = lambda name: record if name == key else []
+        content = self.plugin.get_page()
+        self.assertEqual(content[1]["component"], "VImg")
+        self.assertIn("控件未加载", content[0]["props"]["text"])
+        self.assertIn("暂无", content[-1]["props"]["text"])
+
+    def test_screenshot_failure_does_not_hide_verification_diagnostic(self):
+        page = Mock()
+        page.screenshot.side_effect = RuntimeError("private-token")
+        self.plugin._save_verification_diagnostic(page, "控件未加载", {})
+        record = self.plugin.save_data.call_args.args[1]
+        self.assertNotIn("image", record)
+        self.assertEqual(record["detail"], "控件未加载")
+        self.assertNotIn("private-token", str(record))
 
     def test_slider_can_be_disabled(self):
         _, page = self.browser(WAF)

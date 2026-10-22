@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 import time
@@ -22,7 +23,7 @@ class enshansigncc(_PluginBase):
     plugin_name = "恩山无线论坛签到"
     plugin_desc = "恩山无线论坛每日签到，支持手工Cookie、CookieCloud及消息通知"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/enshansigncc.ico"
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "enshansigncc_"
@@ -280,6 +281,19 @@ class enshansigncc(_PluginBase):
         return launch_browser_context(**options)
 
     @staticmethod
+    def _slider_ready(page):
+        try:
+            handle = page.query_selector("#aliyunCaptcha-sliding-slider")
+            track = page.query_selector("#aliyunCaptcha-sliding-body")
+            if handle is None or track is None:
+                return False
+            knob, rail = handle.bounding_box(), track.bounding_box()
+            return (isinstance(knob, dict) and isinstance(rail, dict) and
+                    knob["width"] > 0 and knob["height"] > 0 and rail["width"] > knob["width"])
+        except Exception:
+            return False
+
+    @staticmethod
     def _try_aliyun_slider(page):
         """仅操作已实测的阿里云直线滑块，不识别未知图片或拼图题型。"""
         pressed = False
@@ -370,8 +384,35 @@ class enshansigncc(_PluginBase):
 
     def _watch_verification(self, page, state):
         """被动读取官方验证响应；不打印URL、请求体、令牌或服务端原文。"""
+        def record_failure(url, reason):
+            host = urlsplit(url).hostname or ""
+            if not re.fullmatch(r"[a-zA-Z0-9.-]{1,253}", host):
+                return
+            failures = state.setdefault("resource_failures", [])
+            item = f"{host}: {reason}"
+            if item not in failures and len(failures) < 8:
+                failures.append(item)
+
+        def on_failed(request):
+            try:
+                if request.resource_type not in ("script", "document", "xhr", "fetch"):
+                    return
+                error = str(request.failure or "")
+                known = next((code for code in ("ERR_NAME_NOT_RESOLVED", "ERR_CONNECTION_TIMED_OUT", "ERR_TIMED_OUT",
+                                                "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_CERT_AUTHORITY_INVALID",
+                                                "ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED", "ERR_BLOCKED_BY_CLIENT")
+                              if code in error), "请求失败")
+                record_failure(request.url, known)
+            except Exception:
+                pass
+
+        def on_pageerror(_):
+            state["script_error_count"] = min(state.get("script_error_count", 0) + 1, 100)
+
         def on_response(response):
             try:
+                if isinstance(response.status, int) and response.status >= 400 and response.request.resource_type in ("script", "document", "xhr", "fetch"):
+                    record_failure(response.url, f"HTTP {response.status}")
                 host = urlsplit(response.url).hostname or ""
                 if host not in ("captcha.cn-shanghai.aliyuncs.com", "captcha.cn-singapore.aliyuncs.com"):
                     return
@@ -386,16 +427,35 @@ class enshansigncc(_PluginBase):
                 pass
         try:
             page.on("response", on_response)
+            page.on("requestfailed", on_failed)
+            page.on("pageerror", on_pageerror)
         except Exception:
             logger.info("[enshansigncc] 当前MP浏览器不支持验证响应监听，继续使用页面状态判断")
+
+    def _save_verification_diagnostic(self, page, detail, state):
+        """只保留最近一次验证失败截图，供插件数据页查看，不附加到通知中。"""
+        record = {"date": datetime.now(ZoneInfo(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S"),
+                  "detail": detail, "resource_failures": state.get("resource_failures", []),
+                  "script_error_count": state.get("script_error_count", 0)}
+        try:
+            shot = page.screenshot(type="jpeg", quality=60, full_page=False, timeout=5000)
+            if isinstance(shot, bytes) and 0 < len(shot) <= 1024 * 1024:
+                record["image"] = "data:image/jpeg;base64," + base64.b64encode(shot).decode("ascii")
+        except Exception:
+            logger.info("[enshansigncc] 验证截图未能保存，继续记录诊断信息")
+        try:
+            self.save_data("verification_diagnostic", record)
+        except Exception:
+            logger.warning("[enshansigncc] 保存验证诊断失败")
 
     def _browser_load(self, page, path, challenge_state=None):
         """先执行站点脚本，再至多尝试一次已适配滑块，并检查真实页面状态。"""
         if challenge_state is None:
             challenge_state = {"slider_attempted": False}
+        wants_slider = self._config.get("auto_slider", True) and not challenge_state["slider_attempted"]
         response = page.goto(urljoin(self._base_url, path), wait_until="domcontentloaded", timeout=30000)
         html = ""
-        for _ in range(6):
+        for _ in range(20 if wants_slider else 6):
             page.wait_for_timeout(1000)
             try:
                 html = page.content()
@@ -403,9 +463,11 @@ class enshansigncc(_PluginBase):
                 continue
             if html and not self._browser_is_verification(html):
                 break
+            if wants_slider and self._slider_ready(page):
+                break
         if not html:
             raise ValueError("浏览器加载恩山页面失败，请检查网络或站点状态")
-        if self._browser_is_verification(html) and self._config.get("auto_slider", True) and not challenge_state["slider_attempted"]:
+        if self._browser_is_verification(html) and wants_slider and self._slider_ready(page):
             challenge_state["slider_attempted"] = True
             if self._try_aliyun_slider(page):
                 logger.info("[enshansigncc] 已尝试阿里云滑块，等待验证后的页面状态")
@@ -428,11 +490,20 @@ class enshansigncc(_PluginBase):
             raise ValueError("浏览器未停留在恩山论坛，请检查登录或站点验证状态")
         if self._browser_is_verification(html):
             detail = self._verification_detail(html)
+            if wants_slider and not challenge_state["slider_attempted"]:
+                detail += "；等待20秒后仍未找到可操作的已适配滑块"
+            failures = challenge_state.get("resource_failures", [])
+            if failures:
+                logger.info(f"[enshansigncc] 验证资源加载异常：{'；'.join(failures)}")
+                detail += "；存在资源加载失败，详见插件数据页"
+            if challenge_state.get("script_error_count"):
+                logger.info(f"[enshansigncc] 页面脚本错误数量：{challenge_state['script_error_count']}")
             code = challenge_state.get("verify_code")
             if code in self._verify_codes:
                 detail += f"；{code}（{self._verify_codes[code]}）"
             logger.info(f"[enshansigncc] 验证页面诊断：{detail}")
-            raise ValueError(f"仍需人工完成恩山真人验证：{detail}；可尝试MP有界面浏览器；人工验证应尽量使用与MP相同的网络出口，同步Cookie不保证解除验证；当前未判定Cookie失效")
+            self._save_verification_diagnostic(page, detail, challenge_state)
+            raise ValueError(f"仍需人工完成恩山真人验证：{detail}；可在插件数据页查看最近验证诊断；当前未判定Cookie失效")
         if response is not None and response.status != 200:
             # 初始403验证页可能已跳转到正常登录页，不能再用旧响应覆盖当前状态。
             if response.status != 403 or not challenge_state["slider_attempted"]:
@@ -602,10 +673,22 @@ class enshansigncc(_PluginBase):
               "use_proxy": False, "cookie_source": "cookiecloud", "cookie": "", "browser_fallback": True, "auto_slider": True, "browser_headed": False}
 
     def get_page(self):
+        content = []
+        diagnostic = self.get_data("verification_diagnostic")
+        if isinstance(diagnostic, dict) and diagnostic.get("detail"):
+            text = f"最近验证失败诊断（{diagnostic.get('date', '-')}）：{diagnostic['detail']}"
+            failures = diagnostic.get("resource_failures") or []
+            if failures:
+                text += "。资源加载异常：" + "；".join(failures)
+            text += f"。页面脚本错误数量：{diagnostic.get('script_error_count', 0)}。此记录为当时状态，不代表当前签到结果。"
+            content.append({"component": "VAlert", "props": {"type": "info", "text": text, "class": "mb-4"}})
+            image = diagnostic.get("image")
+            if isinstance(image, str) and image.startswith("data:image/jpeg;base64,"):
+                content.append({"component": "VImg", "props": {"src": image, "max-height": 600, "contain": True, "class": "mb-4"}})
         history = self.get_data("sign_history") or []
         if not history:
-            return [{"component": "VAlert", "props": {"type": "info", "text": "暂无恩山无线论坛签到记录"}}]
-        return [{"component": "VTable", "content": [
+            return content + [{"component": "VAlert", "props": {"type": "info", "text": "暂无恩山无线论坛签到记录"}}]
+        return content + [{"component": "VTable", "content": [
             {"component": "thead", "content": [{"component": "tr", "content": [
                 {"component": "th", "text": label} for label in ("时间", "结果", "用户", "连续签到", "恩山币", "积分")]}]},
             {"component": "tbody", "content": [{"component": "tr", "content": [
