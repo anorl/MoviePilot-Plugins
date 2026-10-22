@@ -27,7 +27,7 @@ class neteasemusicsigncc(_PluginBase):
     plugin_name = "网易云音乐签到"
     plugin_desc = "网易云音乐每日签到，支持手工Cookie、CookieCloud及MP消息通知"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/NetEaseMusic.png"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "neteasemusicsigncc_"
@@ -206,15 +206,26 @@ class neteasemusicsigncc(_PluginBase):
                 logger.warning("[neteasemusicsigncc] 保存历史失败，本次签到结果不变")
             logger.info(f"[neteasemusicsigncc] {record['status']}")
             if self._config.get("notify", True):
-                details = [record["date"], record["status"]]
+                if record["success"]:
+                    title = f"【✅ {self.plugin_name}成功】"
+                elif record["status"] == "部分完成":
+                    title = f"【⚠️ {self.plugin_name}部分完成】"
+                elif any("结果未确认" in item["status"] for item in record.get("results", [])):
+                    title = f"【⚠️ {self.plugin_name}结果未确认】"
+                else:
+                    title = f"【❌ {self.plugin_name}失败】"
+                details = ["📢 执行结果", "━━━━━━━━━━",
+                           f"🕐 时间：{record['date']}", f"✨ 状态：{record['status']}"]
                 for item in record.get("results", []):
-                    text = f"{item['type']}：{item['status']}"
+                    icon = "📱" if item["type"] == "移动端" else "💻"
+                    text = f"{icon} {item['type']}：{item['status']}"
                     if "point" in item:
-                        text += f"，获得 {item['point']} 点"
+                        text += f"，🎁 获得 {item['point']} 点"
                     details.append(text)
+                details.append("━━━━━━━━━━")
                 try:
                     self.post_message(mtype=NotificationType.SiteMessage,
-                                      title=f"【{self.plugin_name}】", text="\n".join(details))
+                                      title=title, text="\n".join(details))
                 except Exception:
                     logger.warning("[neteasemusicsigncc] 发送消息失败，本次签到结果不变")
             return record

@@ -26,7 +26,7 @@ class fengsigncc(_PluginBase):
     plugin_name = "威锋网签到"
     plugin_desc = "自动完成威锋网每日签到，支持手工Cookie和CookieCloud"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/feng.jpg"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "fengsigncc_"
@@ -302,15 +302,23 @@ class fengsigncc(_PluginBase):
             logger.info(f"[fengsigncc] {record['status']}")
             if self._config.get("notify"):
                 try:
-                    details = [record["date"], record["status"]]
+                    if record["success"]:
+                        title = f"【✅ {self.plugin_name}成功】"
+                    elif "结果未确认" in record["status"]:
+                        title = f"【⚠️ {self.plugin_name}结果未确认】"
+                    else:
+                        title = f"【❌ {self.plugin_name}失败】"
+                    details = ["📢 执行结果", "━━━━━━━━━━",
+                               f"🕐 时间：{record['date']}", f"✨ 状态：{record['status']}"]
                     if record.get("username"):
-                        details.append(f"用户：{record['username']}")
+                        details.append(f"👤 用户：{record['username']}")
                     if "signInCount" in record:
-                        details.append(f"连续签到：{record['signInCount']} 天")
+                        details.append(f"📆 连续签到：{record['signInCount']} 天")
                     if "currentExperience" in record:
-                        details.append(f"当前经验：{record['currentExperience']}")
+                        details.append(f"📊 当前经验：{record['currentExperience']}")
+                    details.append("━━━━━━━━━━")
                     self.post_message(mtype=NotificationType.SiteMessage,
-                                      title=f"【{self.plugin_name}】", text="\n".join(details))
+                                      title=title, text="\n".join(details))
                 except Exception:
                     logger.warning("[fengsigncc] 发送通知失败，本次签到结果不变")
             return record
