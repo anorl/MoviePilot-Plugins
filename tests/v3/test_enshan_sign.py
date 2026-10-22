@@ -74,7 +74,7 @@ class EnshanSignTests(unittest.TestCase):
         meta = json.loads((ROOT / "package.v3.json").read_text(encoding="utf-8"))["enshansigncc"]
         for key, attr in (("name", "plugin_name"), ("description", "plugin_desc"), ("icon", "plugin_icon"), ("version", "plugin_version")):
             self.assertEqual(meta[key], getattr(self.plugin, attr))
-        self.assertEqual(next(iter(meta["history"])), "v1.0.1")
+        self.assertEqual(next(iter(meta["history"])), "v1.0.2")
         self.assertTrue((ROOT / "icons/enshansigncc.ico").exists())
 
     def test_manual_cookie_preserves_encoding_and_never_reads_cloud(self):
@@ -330,6 +330,39 @@ class EnshanSignTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "仍需人工完成"):
                 self.plugin._browser_load(page, self.plugin._sign_page, state)
         self.plugin._try_aliyun_slider.assert_called_once()
+        page.evaluate.assert_not_called()
+
+    def test_authenticated_page_with_residual_waf_script_is_accepted(self):
+        html = SIGNED + '<script>var key="CF_APP_WAF";</script>'
+        _, page = self.browser(html)
+        self.assertEqual(self.plugin._browser_load(page, self.plugin._sign_page), html)
+        page.mouse.down.assert_not_called()
+
+    def test_authenticated_page_with_challenge_control_is_not_accepted(self):
+        html = SIGNED + '<div id="aliyunCaptcha-sliding-text">请按住滑块，拖动到最右边</div><script>"CF_APP_WAF"</script>'
+        self.assertTrue(self.plugin._browser_is_verification(html))
+
+    def test_verification_diagnostics_are_fixed_labels_without_page_secrets(self):
+        cases = (
+            ("验证失败，请重试", "页面提示验证失败或需要重试"),
+            ("验证中…", "页面停留在验证中"),
+            ("验证成功", "页面提示验证通过，但尚未确认论坛登录页面"),
+            ("请按住滑块，拖动到最右边", "页面仍显示拖动滑块提示"),
+            ("请依次点击图片", "页面出现尚未适配的图形验证"),
+        )
+        for text, expected in cases:
+            with self.subTest(text=text):
+                html = f'<div id="aliyunCaptcha-sliding-text">{text} private-token</div><script>private-auth</script>'
+                self.assertEqual(self.plugin._verification_detail(html), expected)
+
+    def test_failure_notification_contains_verification_diagnostic(self):
+        html = WAF + '<div id="aliyunCaptcha-sliding-text">验证失败，请重试</div>'
+        _, page = self.browser(html)
+        self.plugin._try_aliyun_slider = Mock(return_value=True)
+        result = self.plugin._run_browser({"TWcq_2132_auth": "private-auth"})
+        self.assertFalse(result["success"])
+        self.assertIn("页面提示验证失败或需要重试", result["status"])
+        self.assertNotIn("private-", result["status"])
         page.evaluate.assert_not_called()
 
     def test_slider_can_be_disabled(self):

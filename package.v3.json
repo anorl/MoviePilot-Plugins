@@ -3,11 +3,12 @@
     "name": "恩山无线论坛签到",
     "description": "恩山无线论坛每日签到，支持手工Cookie、CookieCloud及消息通知",
     "labels": "站点",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "icon": "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/enshansigncc.ico",
     "author": "anorl",
     "level": 2,
     "history": {
+      "v1.0.2": "补充滑块验证后的安全状态诊断，避免已登录页面残留防护脚本造成误判，验证未通过时保留人工处理提示。",
       "v1.0.1": "适配实测阿里云直线滑块，按实时控件位置尝试一次并确认验证后页面，保留未知题型的人工处理提示。",
       "v1.0.0": "首次发布：支持erling_qd签到、手工Cookie或CookieCloud、MP浏览器验证兜底、历史记录及带图标的消息通知。"
     },

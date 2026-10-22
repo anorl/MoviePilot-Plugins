@@ -22,7 +22,7 @@ class enshansigncc(_PluginBase):
     plugin_name = "恩山无线论坛签到"
     plugin_desc = "恩山无线论坛每日签到，支持手工Cookie、CookieCloud及消息通知"
     plugin_icon = "https://raw.githubusercontent.com/anorl/MoviePilot-Plugins/main/icons/enshansigncc.ico"
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     plugin_author = "anorl"
     author_url = "https://github.com/anorl"
     plugin_config_prefix = "enshansigncc_"
@@ -315,6 +315,42 @@ class enshansigncc(_PluginBase):
                 except Exception:
                     pass
 
+    def _browser_is_verification(self, html):
+        """登录页仍有验证控件时继续等待；仅残留脚本不覆盖已确认的登录状态。"""
+        if not self._is_verification(html):
+            return False
+        soup = BeautifulSoup(html, "html.parser")
+        for node in soup.select("script, style, noscript"):
+            node.decompose()
+        text = soup.get_text(" ", strip=True)
+        if soup.select_one('[id^="aliyunCaptcha"], #waf-nc-h5-mask, [id^="cf-chl-"]') or "验证您是真人" in text:
+            return True
+        try:
+            self._parse_login_page(html)
+        except ValueError:
+            return True
+        return False
+
+    @staticmethod
+    def _verification_detail(html):
+        """只输出预设状态，不回显页面原文、Request ID、URL或令牌。"""
+        soup = BeautifulSoup(html, "html.parser")
+        for node in soup.select("script, style, noscript"):
+            node.decompose()
+        label = soup.select_one("#aliyunCaptcha-sliding-text")
+        text = label.get_text(" ", strip=True) if label else soup.get_text(" ", strip=True)
+        if re.search(r"验证失败|验证未通过|请重试|重新验证|刷新重试", text):
+            return "页面提示验证失败或需要重试"
+        if re.search(r"验证成功|验证通过", text):
+            return "页面提示验证通过，但尚未确认论坛登录页面"
+        if "验证中" in text:
+            return "页面停留在验证中"
+        if re.search(r"按住滑块|拖动.*最右", text):
+            return "页面仍显示拖动滑块提示"
+        if re.search(r"拼图|图形验证|依次点击|图片验证|选择.*图片", text):
+            return "页面出现尚未适配的图形验证"
+        return "页面仍有防护标记，未识别到明确验证结果"
+
     def _browser_load(self, page, path, challenge_state=None):
         """先执行站点脚本，再至多尝试一次已适配滑块，并检查真实页面状态。"""
         if challenge_state is None:
@@ -327,11 +363,11 @@ class enshansigncc(_PluginBase):
                 html = page.content()
             except Exception:
                 continue
-            if html and not self._is_verification(html):
+            if html and not self._browser_is_verification(html):
                 break
         if not html:
             raise ValueError("浏览器加载恩山页面失败，请检查网络或站点状态")
-        if self._is_verification(html) and self._config.get("auto_slider", True) and not challenge_state["slider_attempted"]:
+        if self._browser_is_verification(html) and self._config.get("auto_slider", True) and not challenge_state["slider_attempted"]:
             challenge_state["slider_attempted"] = True
             if self._try_aliyun_slider(page):
                 logger.info("[enshansigncc] 已尝试阿里云滑块，等待验证后的页面状态")
@@ -342,7 +378,7 @@ class enshansigncc(_PluginBase):
                     except Exception:
                         # 验证成功可能触发页面跳转，导航过程中暂时不能读取DOM。
                         continue
-                    if html and not self._is_verification(html):
+                    if html and not self._browser_is_verification(html):
                         try:
                             self._parse_login_page(html)
                         except ValueError:
@@ -352,8 +388,10 @@ class enshansigncc(_PluginBase):
         parts = urlsplit(page.url)
         if parts.scheme != "https" or parts.hostname not in ("www.right.com.cn", "right.com.cn") or not parts.path.startswith("/forum/"):
             raise ValueError("浏览器未停留在恩山论坛，请检查登录或站点验证状态")
-        if self._is_verification(html):
-            raise ValueError("仍需人工完成恩山真人验证，请在已登录浏览器完成验证后重新同步Cookie；当前未判定Cookie失效")
+        if self._browser_is_verification(html):
+            detail = self._verification_detail(html)
+            logger.info(f"[enshansigncc] 验证页面诊断：{detail}")
+            raise ValueError(f"仍需人工完成恩山真人验证：{detail}；请在已登录浏览器完成验证后重新同步Cookie；当前未判定Cookie失效")
         if response is not None and response.status != 200:
             # 初始403验证页可能已跳转到正常登录页，不能再用旧响应覆盖当前状态。
             if response.status != 403 or not challenge_state["slider_attempted"]:
