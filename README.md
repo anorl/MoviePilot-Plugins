@@ -12,6 +12,7 @@
 - `nodeseeksigncc`：NodeSeek 论坛每日签到
 - `fengsigncc`：威锋网每日签到（手工 Cookie / CookieCloud）
 - `neteasemusicsigncc`：网易云音乐每日签到（手工 Cookie / CookieCloud、MP 通知）
+- `tiebasigncc`：百度贴吧逐吧签到（手工 Cookie / CookieCloud、历史详情和 MP 通知）
 
 ## 安装
 
@@ -96,6 +97,26 @@
 - `use_proxy` 默认关闭，可按需使用 MP 系统代理。
 
 协议实现依据：[每日签到与 Cookie/CSRF 请求流程](https://github.com/chen310/NeteaseCloudMusicTasks/blob/main/api.py)、[WEAPI 参数说明实现](https://github.com/chen310/NeteaseCloudMusicTasks/blob/main/encrypt.py)、[两端返回码处理参考](https://github.com/jrh520/wyy-action/blob/master/checkin.py)。本插件仅完成每日签到；真实账户签到和 TG 送达需安装到 MP 后验证。
+
+## tiebasigncc（百度贴吧）
+
+适用于 MoviePilot V3，自动签到当前账号关注的贴吧。使用从贴吧官方静态资源获取的 `icons/tiebasigncc.ico`。
+
+1. 浏览器登录 `https://tieba.baidu.com`。
+2. 选择 **手工填写** 并粘贴包含 `BDUSS` 的完整 Cookie，或使用默认的 **MoviePilot CookieCloud**，在 MP 配置本地/远端服务并同步贴吧登录 Cookie。
+3. 按需开启「立即运行一次」。默认每天 9 点执行，逐吧间隔 5 秒（可配置 3～60 秒），时区沿用 MP。
+4. 「发送通知」默认开启，通过 MP 的站点消息渠道投递。TG 请在 MP 配置 Telegram 并允许该渠道接收站点消息，无需重复填写 Bot Token。
+
+插件先验证 `BDUSS` 登录态并获取 TBS，再分页读取全部关注贴吧、去重后逐吧签到；不自动关注新贴吧。CookieCloud 读取 `tieba.baidu.com` / `.baidu.com` 的根路径 Cookie，过滤过期、无关域名和同名冲突；不同 Cookie 来源不会自动相互回退。
+
+- 通知含时间、总结果、关注数量、新签到、已签到、失败、未确认和未提交数量，配有相应图标。异常详情最多展示 15 条，完整结果在历史页查看。
+- 历史保留最近 100 次运行，展开每次记录可查看逐吧结果；登录失效、网络失败等也会记录并通知。
+- 不自动重试签到提交；超时或断线标记“结果未确认”。遇到验证码或风控、HTTP异常或非JSON响应时停止后续提交，剩余贴吧标记为未提交；请在浏览器检查后再运行。
+- 关闭或重载插件会在当前请求返回后停止后续签到；并发触发时跳过重复任务。
+- 保存历史或发送消息失败不会覆盖已确认结果；日志、历史和通知不记录 Cookie、BDUSS、TBS、签名或服务器原始响应。
+- `use_proxy` 默认关闭，可选择 MP 系统代理。所有贴吧接口均通过 HTTPS 请求，不跟随重定向。
+
+接口参考：[贴吧客户端列表与签到](https://github.com/starudream/sign-task/blob/master/pkg/tieba/api/forum.go)、[请求签名](https://github.com/starudream/sign-task/blob/master/pkg/tieba/api/sign.go)、[关注列表分页及返回码格式](https://github.com/Alcatraz-Zhang/TiebaSignIn/blob/feat/keepalive-liskin/tieba_client.py)。本地测试不代表真实账号签到成功，安装后应查看一次实际运行结果和消息送达。
 
 ## 免责声明
 

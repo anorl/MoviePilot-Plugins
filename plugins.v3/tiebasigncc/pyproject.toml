@@ -1,0 +1,5 @@
+[project]
+name = "moviepilot-plugin-tiebasigncc"
+dynamic = ["version"]
+requires-python = ">=3.14"
+dependencies = ["requests>=2.32.0,<3.0.0"]
